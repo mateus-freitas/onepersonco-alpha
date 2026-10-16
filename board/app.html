@@ -5,11 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>One Person Company — alpha</title>
 <script>
-  // System preference drives the .dark class unless the toggle overrides it.
-  const _mq = window.matchMedia("(prefers-color-scheme: dark)");
-  const _apply = (d) => document.documentElement.classList.toggle("dark", d);
-  _apply(_mq.matches);
-  if (_mq.addEventListener) _mq.addEventListener("change", (e) => _apply(e.matches));
+  // Internal tool: dark by default. The header toggle still switches themes per visit.
+  document.documentElement.classList.add("dark");
 </script>
 <link rel="stylesheet" href="global.css">
 <style>

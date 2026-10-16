@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T12:40:00.580Z",
+  "generatedAt": "2026-10-16T12:42:05.535Z",
   "org": "One Person Company (alpha)",
   "scratchRoot": "~/dev/.onepersonco",
   "projects": [
@@ -38,8 +38,8 @@
       "standardized": true,
       "exists": true,
       "branch": "main",
-      "lastCommit": "2026-10-16 feat(board): adopt the shadcn preset theme — global.css, readable defaults, dark toggle",
-      "dirty": 0,
+      "lastCommit": "2026-10-16 fix(opc): serve board markup fresh per request; clear port-in-use error",
+      "dirty": 3,
       "backlog": {
         "Now": [
           {
@@ -119,7 +119,7 @@
             "checked": true
           },
           {
-            "title": "P3 · Board restyle — shadcn preset theme in `board/global.css`, readable defaults, dark mode toggle; snapshot inlines the theme",
+            "title": "P3 · Board restyle — shadcn preset theme in `board/global.css`, readable defaults, dark by default with a toggle; snapshot inlines the theme",
             "spec": null,
             "priority": null,
             "date": "2026-10-16",

@@ -5,11 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>One Person Company — alpha</title>
 <script>
-  // System preference drives the .dark class unless the toggle overrides it.
-  const _mq = window.matchMedia("(prefers-color-scheme: dark)");
-  const _apply = (d) => document.documentElement.classList.toggle("dark", d);
-  _apply(_mq.matches);
-  if (_mq.addEventListener) _mq.addEventListener("change", (e) => _apply(e.matches));
+  // Internal tool: dark by default. The header toggle still switches themes per visit.
+  document.documentElement.classList.add("dark");
 </script>
 <style>
 /* One Person Company — alpha · global theme
@@ -175,7 +172,7 @@ code, pre, kbd, .mono, .sub {
   <footer id="foot"></footer>
 </div>
 <script>window.__DATA__ = {
-  "generatedAt": "2026-10-16T12:39:50.882Z",
+  "generatedAt": "2026-10-16T12:42:05.535Z",
   "org": "One Person Company (alpha)",
   "scratchRoot": "~/dev/.onepersonco",
   "projects": [
@@ -214,8 +211,8 @@ code, pre, kbd, .mono, .sub {
       "standardized": true,
       "exists": true,
       "branch": "main",
-      "lastCommit": "2026-10-16 feat(opc): board v1 — scan, localhost serve, snapshot",
-      "dirty": 5,
+      "lastCommit": "2026-10-16 fix(opc): serve board markup fresh per request; clear port-in-use error",
+      "dirty": 3,
       "backlog": {
         "Now": [
           {
@@ -295,7 +292,7 @@ code, pre, kbd, .mono, .sub {
             "checked": true
           },
           {
-            "title": "P3 · Board restyle — shadcn preset theme in `board/global.css`, readable defaults, dark mode toggle; snapshot inlines the theme",
+            "title": "P3 · Board restyle — shadcn preset theme in `board/global.css`, readable defaults, dark by default with a toggle; snapshot inlines the theme",
             "spec": null,
             "priority": null,
             "date": "2026-10-16",
