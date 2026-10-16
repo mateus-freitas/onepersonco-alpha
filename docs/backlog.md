@@ -6,14 +6,16 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 
 ## Now
 
+- [ ] P3 · Worktrees view in the console — every project's checkouts (OPC root · T3 · legacy) with branch, dirty, ahead/behind, PR status via `gh`, clickable paths, and a "safe to remove" hint when merged + clean
+
 ## Next
 
 - [ ] Retrofit blocos — backlog seed from the P2-xx roadmaps, `flutter` + `ts-firebase` overlays, consider Greptile parity
 
 ## Later
 
-- [ ] P4 · Board write-back (drag to restatus edits the backlog line)
-- [ ] P4 · Board worktree-awareness — surface active worktrees (`~/dev/.onepersonco/worktrees/`, `~/.t3/worktrees/`) alongside the registry mains
+- [ ] P4 · Console write-back (drag to restatus edits the backlog line)
+- [ ] P4 · Worktrees follow-ups — drift vs standards, backlog delta vs main, cleanup action
 - [ ] P4 · `opc sync`/`check` — reject unknown flags instead of ignoring them (a typo like `-dir` silently falls back to the CWD/control-room target)
 - [ ] Lifetime · Fold legacy worktrees (`~/dev/agents-worktrees/`, `~/dev/*-wt-*`) into the worktrees root as they finish
 - [ ] P5 · Skeleton extraction + `opc new` for future projects
