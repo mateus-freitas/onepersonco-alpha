@@ -1,6 +1,6 @@
 ---
 name: opc-delegate
-description: Use before delegating or orchestrating agent work in an OPC (One Person Company) project — writing worker briefs, launching subagents or parallel workers, and integrating their results. Triggers: delegate, subagent, worker, orchestrate, spawn agents, run in parallel.
+description: "Use before delegating or orchestrating agent work in an OPC (One Person Company) project. Covers worker briefs, launching subagents or parallel workers, and integrating their results. Triggers include delegate, subagent, worker, orchestrate, spawn agents, run in parallel."
 ---
 
 # Delegating work in OPC projects

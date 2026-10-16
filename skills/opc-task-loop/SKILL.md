@@ -1,6 +1,6 @@
 ---
 name: opc-task-loop
-description: Use when finishing work in an OPC (One Person Company) project — closing backlog lines, filing leftovers, deciding where documents go, and graduating durable knowledge. Triggers: task done, wrap up, write it up, where should this doc go, close the task.
+description: "Use when finishing work in an OPC (One Person Company) project. Covers closing backlog lines, filing leftovers, deciding where documents go, and graduating durable knowledge. Triggers include task done, wrap up, write it up, where should this doc go, close the task."
 ---
 
 # Closing out a task in OPC projects
