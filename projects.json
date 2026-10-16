@@ -17,7 +17,7 @@
       "path": "~/dev/gymbloc",
       "stack": ["swift", "ios"],
       "docs": "docs",
-      "standardized": false
+      "standardized": true
     },
     {
       "id": "onepersonco-alpha",
