@@ -33,13 +33,18 @@ You are the orchestrator. You own architecture, interfaces, integration, and
 6. **On completion: verify, don't trust.** Read `NOTES.md`, review every diff,
    re-run the stated verification yourself. "The worker said it passes" is not
    evidence. Fix or return the work, then commit — the commit is yours.
-7. **Close the backlog.** At the end of the run, validate `docs/backlog.md`:
+7. **Open the PR by the project's triggers.** Before opening a PR, check the
+   project's `AGENTS.md` for external review triggers (labels, bots, order)
+   and follow them at open time: open as draft when the flow requires it,
+   apply trigger labels while still draft, then mark ready. Record
+   selected/skipped in the PR body.
+8. **Close the backlog.** At the end of the run, validate `docs/backlog.md`:
    every objective line ticked, every discovery captured as a line, nothing
    half-worded. Workers are allowed to edit the backlog on their branches —
    validate their edits rather than blocking them (a solo agent relies on
    that). Whatever is missing lands as a small separate `docs(backlog): …`
    commit or PR — never reopen a finished PR for bookkeeping.
-8. **Report honestly:** verified state, what was skipped, open questions, what
+9. **Report honestly:** verified state, what was skipped, open questions, what
    the owner must decide.
 
 Non-negotiables: workers never commit, push, or merge; delegation never

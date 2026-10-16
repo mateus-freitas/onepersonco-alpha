@@ -61,7 +61,9 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 - UI changes: before/after images (motion or timing: a short video). Upload media
   to GitHub — never commit PR-only assets to the repo.
 - Open draft first when the flow requires independent reviews; mark ready only
-  with evidence on the final head.
+  with evidence on the final head. If the project's local block defines an
+  external review trigger, apply it before the PR leaves draft; some triggers
+  do not fire on PRs that are already ready.
 - A merged PR is the implementation record; update the tracking item when it lands.
 
 ### Babysitting

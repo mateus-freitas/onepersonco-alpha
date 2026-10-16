@@ -42,3 +42,4 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 - [x] Standards · Backlog source-of-truth + orchestrator closing duty; both skills refreshed — 2026-10-16
 - [x] P4 · Worktree awareness for `opc sync`/`check` — target the active worktree, not the registry's main checkout (a live sync wrote into gymbloc's main during the retrofit; reverted by hand) — 2026-10-16
 - [x] P3 · Worktrees view in the console — every project's checkouts (OPC root · T3 · legacy) with branch, dirty, ahead/behind, PR status via `gh`, clickable paths, and a "safe to remove" hint when merged + clean — 2026-10-16
+- [x] Standards · External review triggers at PR open (draft → trigger → ready) — generic line in the `git-pr` fragment + one step in both skills, tool-neutral; no registry/console field — 2026-10-16

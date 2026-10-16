@@ -26,13 +26,18 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
 3. **Graduate.** If the work produced durable knowledge, write it now:
    distill into `internals/` or an RFC/ADR — new, or an update to an existing
    one. The working plan file itself is discarded, never committed.
-4. **Record.** The merged PR is the implementation record; update the tracking
+4. **Open the PR by the project's triggers.** Before opening a PR, check the
+   project's `AGENTS.md` for external review triggers (labels, bots, order)
+   and follow them at open time: open as draft when the flow requires it,
+   apply trigger labels while still draft, then mark ready. Record
+   selected/skipped in the PR body.
+5. **Record.** The merged PR is the implementation record; update the tracking
    item. An evidence folder only when the project tracks one.
-5. **Archive the session.** Move the task's scratch folder
+6. **Archive the session.** Move the task's scratch folder
    (`prompts/<date>-<slug>/`) to `prompts/archive/` once its outcome is
    captured; anything still open is a backlog line, not a note.
-6. **Verify before claiming done.** `opc check` for structure and drift, plus
+7. **Verify before claiming done.** `opc check` for structure and drift, plus
    the project's own gates for code. Never claim green from memory.
 
 This skill points; it does not restate. The rules themselves live in the
-`docs` and `backlog` blocks of the project's `AGENTS.md`.
+project's `AGENTS.md` — its synced blocks and its local sections.
