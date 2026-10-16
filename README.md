@@ -14,7 +14,7 @@ version gets the `onepersonco` name — this checkout keeps `-alpha`.
 | `projects.json` | the project registry — adding a project here makes the board see it |
 | `skeleton/` | template for new projects, extracted from blocos + gymbloc |
 | `board/` | local visual board: scan → index → localhost UI |
-| `scripts/` | `devkit` CLI: `sync` · `lint` · `scan` · `new` |
+| `scripts/` | the `opc` CLI: `sync` · `check` · `scan` · `board` (`new` comes with the skeleton) |
 
 Scratch lives *outside* every repo, in the hidden sibling `~/dev/.onepersonco/`
 (see its README). Nothing there is committed anywhere; nothing there is a source

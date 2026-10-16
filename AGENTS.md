@@ -160,7 +160,7 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 - PR policy: **direct** — conventional commit titles straight to `main`; no
   branches or PRs for this repo unless a change is risky.
-- Consistency: standardized projects are kept in line by `opc sync` and (soon)
+- Consistency: standardized projects are kept in line by `opc sync` and
   `opc check`. Drift is a bug, not a style choice.
-- Commands: `node scripts/opc.mjs sync` · `… scan` (refresh `board/data.json`; add `--snapshot` for a self-contained page) · `… board` (serve at localhost, rescans on every open). `opc check` and `opc new` arrive next.
+- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc board` (rescans on every open). `opc new` arrives with the skeleton.
 - The hub itself is registered in `projects.json`, so the board covers it.
