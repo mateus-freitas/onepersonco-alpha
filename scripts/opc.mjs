@@ -1,21 +1,26 @@
 #!/usr/bin/env node
-// opc — the One Person Company CLI (alpha). v0: `opc sync`.
+// opc — the One Person Company CLI (alpha): sync · scan · board
 //
-// Composes standards/core fragments into each standardized project:
-//   <!-- opc-block: name -->  →  the AGENTS.md block between matching markers
-//   <!-- opc-file: rel/path -->  →  a full generated file at that path
-// Never touches anything outside managed blocks or generated files.
+// sync   compose standards/core fragments into standardized projects
+// scan   write board/data.json (+ --snapshot for a self-contained page)
+// board  serve the local board; /data.json rescans on every load
 
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import http from "node:http";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const HUB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registry = JSON.parse(fs.readFileSync(path.join(HUB, "projects.json"), "utf8"));
 const standardsDir = path.join(HUB, "standards", "core");
+const boardDir = path.join(HUB, "board");
 
-const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
+const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
+const SECTIONS = ["Now", "Next", "Later", "Done"];
+
+// ---------------------------------------------------------------- sync
 
 function loadFragments() {
   return fs
@@ -30,8 +35,6 @@ function loadFragments() {
     });
 }
 
-// Returns true when the file changed, false when already up to date,
-// "missing" when the target carries no markers for this block yet.
 function syncBlock(projectDir, name, body) {
   const agents = path.join(projectDir, "AGENTS.md");
   const src = fs.readFileSync(agents, "utf8");
@@ -56,16 +59,9 @@ function syncFile(projectDir, rel, body, fragmentFile) {
   return true;
 }
 
-function main() {
-  const cmd = process.argv[2];
-  if (cmd !== "sync") {
-    console.log("usage: opc sync");
-    process.exit(2);
-  }
-
+function cmdSync() {
   const fragments = loadFragments();
   let changes = 0;
-
   for (const project of registry.projects) {
     if (!project.standardized) {
       console.log(`${project.id}: pending retrofit (skipped)`);
@@ -73,7 +69,6 @@ function main() {
     }
     const dir = expand(project.path);
     if (!fs.existsSync(dir)) throw new Error(`${project.id}: path does not exist: ${dir}`);
-
     const updated = [];
     const missing = [];
     for (const f of fragments) {
@@ -85,13 +80,201 @@ function main() {
     const note = missing.length ? ` — MISSING markers: ${missing.join(", ")}` : "";
     console.log(`${project.id}: ${updated.length ? "updated " + updated.join("; ") : "up to date"}${note}`);
   }
-
   console.log(changes ? `sync done — ${changes} update(s)` : "sync done — everything up to date");
+}
+
+// ---------------------------------------------------------------- scan
+
+function git(dir, args) {
+  const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  return r.status === 0 ? r.stdout.replace(/\n$/, "") : null;
+}
+
+function parseBacklog(file) {
+  if (!fs.existsSync(file)) return null;
+  const sections = { Now: [], Next: [], Later: [], Done: [] };
+  let current = null;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const h = line.match(/^##\s+(.+)$/);
+    if (h) {
+      current = SECTIONS.find((s) => h[1].trim().toLowerCase().startsWith(s.toLowerCase())) || null;
+      continue;
+    }
+    if (!current) continue;
+    const item = line.match(/^-\s+\[( |x|X)\]\s+(.+)$/);
+    if (!item) continue;
+    let rest = item[2].trim();
+    let spec = null;
+    let priority = null;
+    let date = null;
+    const specM = rest.match(/\s+—\s+spec:\s+(\S+)/);
+    if (specM) { spec = specM[1]; rest = rest.replace(specM[0], ""); }
+    const priM = rest.match(/\s+—\s+(p[0-3]|P[0-3])\s*$/);
+    if (priM) { priority = priM[1].toLowerCase(); rest = rest.replace(priM[0], ""); }
+    const dateM = rest.match(/\s+—\s+(\d{4}-\d{2}-\d{2})\s*$/);
+    if (dateM) { date = dateM[1]; rest = rest.replace(dateM[0], ""); }
+    sections[current].push({
+      title: rest.trim(),
+      spec,
+      priority,
+      date,
+      checked: item[1].toLowerCase() === "x",
+    });
+  }
+  return sections;
+}
+
+function parseDocHeader(file) {
+  const text = fs.readFileSync(file, "utf8");
+  if (!text.startsWith("---\n")) return null;
+  const end = text.indexOf("\n---", 4);
+  if (end === -1) return null;
+  const header = {};
+  for (const line of text.slice(4, end).split("\n")) {
+    const m = line.match(/^([A-Za-z_]+):\s*(.+?)\s*$/);
+    if (m) header[m[1].toLowerCase()] = m[2];
+  }
+  const titleM = text.match(/^#\s+(.+)$/m);
+  return { ...header, title: titleM ? titleM[1].trim() : path.basename(file, ".md") };
+}
+
+function walk(dir, out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) continue;
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(p, out);
+    else if (entry.name.endsWith(".md")) out.push(p);
+  }
+  return out;
+}
+
+function listPromptSessions(scratchRoot, id) {
+  const dir = path.join(expand(scratchRoot), id, "prompts");
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+    .map((e) => {
+      const full = path.join(dir, e.name);
+      const files = fs.readdirSync(full).filter((f) => !f.startsWith(".")).length;
+      const dateM = e.name.match(/^(\d{4}-\d{2}-\d{2})/);
+      return {
+        name: e.name,
+        date: dateM ? dateM[1] : null,
+        files,
+        mtime: fs.statSync(full).mtime.toISOString().slice(0, 10),
+      };
+    })
+    .sort((a, b) => (b.mtime || "").localeCompare(a.mtime || ""));
+}
+
+function scanProject(p) {
+  const dir = expand(p.path);
+  const exists = fs.existsSync(dir);
+  const docsDir = path.join(dir, p.docs || "docs");
+  const entry = {
+    id: p.id,
+    name: p.name,
+    path: dir,
+    standardized: !!p.standardized,
+    exists,
+    branch: exists ? git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]) : null,
+    lastCommit: exists ? git(dir, ["log", "-1", "--format=%cs %s"]) : null,
+    dirty: exists ? (git(dir, ["status", "--porcelain"]) || "").split("\n").filter(Boolean).length : 0,
+    backlog: null,
+    docs: [],
+    promptSessions: [],
+    legacyPromptFiles: 0,
+  };
+  if (!exists) return entry;
+  entry.backlog = parseBacklog(path.join(docsDir, "backlog.md"));
+  if (fs.existsSync(docsDir)) {
+    for (const f of walk(docsDir)) {
+      if (f.includes(`${path.sep}prompts${path.sep}`)) {
+        entry.legacyPromptFiles++;
+        continue;
+      }
+      const header = parseDocHeader(f);
+      if (header) entry.docs.push({ file: path.relative(dir, f), ...header });
+    }
+  }
+  entry.promptSessions = listPromptSessions(registry.scratchRoot, p.id);
+  return entry;
+}
+
+function scanAll() {
+  return {
+    generatedAt: new Date().toISOString(),
+    org: registry.org,
+    scratchRoot: registry.scratchRoot,
+    projects: registry.projects.map(scanProject),
+  };
+}
+
+function cmdScan(args) {
+  const data = scanAll();
+  fs.mkdirSync(boardDir, { recursive: true });
+  const json = JSON.stringify(data, null, 2);
+  fs.writeFileSync(path.join(boardDir, "data.json"), json);
+  const lines = data.projects.reduce((n, p) => {
+    if (!p.backlog) return n;
+    return n + SECTIONS.reduce((m, s) => m + p.backlog[s].length, 0);
+  }, 0);
+  console.log(`board/data.json written — ${data.projects.length} project(s), ${lines} backlog line(s)`);
+  if (args.includes("--snapshot")) {
+    const app = fs.readFileSync(path.join(boardDir, "app.html"), "utf8");
+    const safe = json.replace(/</g, "\\u003c");
+    const injected = app.replace("<!--__DATA__-->", `<script>window.__DATA__ = ${safe};</` + `script>`);
+    fs.writeFileSync(path.join(boardDir, "snapshot.html"), injected);
+    console.log("board/snapshot.html written — self-contained page");
+  }
+}
+
+// ---------------------------------------------------------------- board
+
+function cmdBoard(args) {
+  const portIdx = args.indexOf("--port");
+  const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 4770;
+  const appHtml = fs.readFileSync(path.join(boardDir, "app.html"), "utf8");
+
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, `http://localhost:${port}`);
+    if (url.pathname === "/" || url.pathname === "/index.html") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      return res.end(appHtml);
+    }
+    if (url.pathname === "/data.json") {
+      const data = scanAll();
+      fs.writeFileSync(path.join(boardDir, "data.json"), JSON.stringify(data, null, 2));
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      return res.end(JSON.stringify(data));
+    }
+    res.writeHead(404);
+    res.end("not found");
+  });
+
+  const data = scanAll();
+  const pending = data.projects.filter((p) => p.exists && !p.backlog).map((p) => p.id);
+  server.listen(port, () => {
+    console.log(`opc board → http://localhost:${port}`);
+    console.log(`pending retrofit: ${pending.length ? pending.join(", ") : "none"} — data rescans on every load`);
+  });
+}
+
+// ---------------------------------------------------------------- main
+
+function main() {
+  const [cmd, ...args] = process.argv.slice(2);
+  if (cmd === "sync") return cmdSync();
+  if (cmd === "scan") return cmdScan(args);
+  if (cmd === "board") return cmdBoard(args);
+  console.log("usage:\n  opc sync                compose standards into standardized projects\n  opc scan [--snapshot]   write board/data.json (and a self-contained snapshot.html)\n  opc board [--port N]    serve the board at http://localhost:N");
+  process.exit(2);
 }
 
 try {
   main();
 } catch (err) {
-  console.error(`opc sync failed: ${err.message}`);
+  console.error(`opc ${process.argv[2] || ""} failed: ${err.message}`);
   process.exit(1);
 }

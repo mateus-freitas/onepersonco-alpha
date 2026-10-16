@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One Person Company — alpha</title>
+<style>
+  :root{
+    --fg: var(--foreground, #e8e8ea);
+    --mut: var(--muted-foreground, #9a9aa3);
+    --line: var(--border, rgba(140,140,150,.35));
+    --card: var(--card, rgba(140,140,150,.07));
+    --card2: var(--secondary, rgba(140,140,150,.14));
+    --accent: var(--accent, #7c6cf0);
+    --accentf: var(--accent-foreground, #8f7bff);
+    --ok: var(--success, #3fae6a);
+    --warn: var(--warning, #d99b2b);
+    --radius: var(--radius, 10px);
+    --mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    --sans: var(--font-sans, -apple-system, "Segoe UI", sans-serif);
+    --p1: var(--chart-1, #5b8def);
+    --p2: var(--chart-2, #d9a02a);
+    --p3: var(--chart-3, #9a6de0);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--fg);background:var(--background, transparent);font:13.5px/1.5 var(--sans)}
+  .wrap{display:flex;flex-direction:column;gap:18px}
+  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  header h1{font-size:15px;margin:0}
+  header .sub{color:var(--mut);font-size:11.5px;font-family:var(--mono)}
+  header .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .pill{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:99px;padding:2px 8px;color:var(--mut)}
+  button.pill{cursor:pointer;background:transparent;color:var(--fg)}
+  button.pill:hover{border-color:var(--accent)}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11.5px;border:1px solid var(--line);border-radius:99px;padding:4px 10px;color:var(--mut);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .chip.on{border-color:var(--accent);color:var(--fg);background:var(--card)}
+  .chip .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  .tab{font-size:12.5px;padding:4px 10px;border-radius:99px;color:var(--mut);cursor:pointer;background:transparent;border:none}
+  .tab.on{background:var(--card2);color:var(--fg);font-weight:600}
+  .tab .n{font-family:var(--mono);font-size:10px;opacity:.7;margin-left:4px}
+  .banner{border:1px dashed var(--line);border-radius:var(--radius);padding:10px 14px;color:var(--mut);font-size:12px}
+  .banner b{color:var(--fg)}
+  .cols{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media (max-width:680px){.cols{grid-template-columns:repeat(2,1fr)}}
+  .col{border:1px solid var(--line);border-radius:var(--radius);padding:10px;min-height:80px;display:flex;flex-direction:column;gap:8px}
+  .col .hd{font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);display:flex;gap:6px}
+  .card{border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:var(--card);font-size:12px}
+  .card .meta{display:flex;gap:6px;align-items:center;color:var(--mut);font-size:10.5px;font-family:var(--mono);margin-top:5px;flex-wrap:wrap}
+  .card.done{opacity:.55}
+  .card.done .t{text-decoration:line-through}
+  .card .t{line-height:1.35}
+  .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .tag{font-size:9.5px;font-family:var(--mono);border:1px solid var(--line);border-radius:99px;padding:1px 7px;color:var(--mut)}
+  .tag.ok{border-color:color-mix(in srgb, var(--ok) 55%, var(--line));color:var(--ok)}
+  .tag.warn{border-color:color-mix(in srgb, var(--warn) 55%, var(--line));color:var(--warn)}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .row{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12.5px}
+  .row .k{font-family:var(--mono);font-size:10.5px;color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--mut);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  td.mono,.mono{font-family:var(--mono);font-size:10.5px;color:var(--mut)}
+  .empty{color:var(--mut);font-size:12px;padding:10px 2px}
+  .sessions{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+  footer{color:var(--mut);font-size:11px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>One Person Company <span class="pill">alpha</span></h1>
+    <span class="sub" id="gen"></span>
+    <span class="right"><button class="pill" id="rescan" style="display:none">rescan</button></span>
+  </header>
+  <nav class="chips" id="chips"></nav>
+  <nav class="tabs" id="tabs"></nav>
+  <main id="view"></main>
+  <footer id="foot"></footer>
+</div>
+<script>window.__DATA__ = {
+  "generatedAt": "2026-10-16T11:23:37.905Z",
+  "org": "One Person Company (alpha)",
+  "scratchRoot": "~/dev/.onepersonco",
+  "projects": [
+    {
+      "id": "blocos",
+      "name": "Blocos",
+      "path": "/Users/mateus/dev/blocos",
+      "standardized": false,
+      "exists": true,
+      "branch": "refactor/recurring-blocks",
+      "lastCommit": "2026-10-16 feat(onboarding): round-2 visual pass from owner feedback",
+      "dirty": 13,
+      "backlog": null,
+      "docs": [],
+      "promptSessions": [],
+      "legacyPromptFiles": 0
+    },
+    {
+      "id": "gymbloc",
+      "name": "Gymbloc",
+      "path": "/Users/mateus/dev/gymbloc",
+      "standardized": false,
+      "exists": true,
+      "branch": "main",
+      "lastCommit": "2026-10-15 Rewrite v0 status ledger as a short slice table (D10) (#33)",
+      "dirty": 0,
+      "backlog": null,
+      "docs": [],
+      "promptSessions": [],
+      "legacyPromptFiles": 108
+    },
+    {
+      "id": "onepersonco-alpha",
+      "name": "One Person Company (alpha)",
+      "path": "/Users/mateus/dev/onepersonco-alpha",
+      "standardized": true,
+      "exists": true,
+      "branch": "main",
+      "lastCommit": "2026-10-16 feat(standards): docs/guides for human how-tos; backlog reordered for the alpha-complete pass",
+      "dirty": 3,
+      "backlog": {
+        "Now": [
+          {
+            "title": "P3 · Board v1 — `opc scan` + localhost views (kanban, RFCs, prompts, evidence) from the registry and scratch",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          },
+          {
+            "title": "P3 · Finalize the alpha — dogfood pass: the hub follows everything it prescribes, the board renders it, checks come back green",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          }
+        ],
+        "Next": [
+          {
+            "title": "P4 · `opc check` — deterministic health: structure, drift (`sync` would change nothing), backlog lines, links; runs when the board opens, exit code for hooks",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          },
+          {
+            "title": "Retrofit gymbloc — managed blocks, `docs/internals/`, `backlog.md` seed, prompts → scratch, `swift-ios` overlay",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          },
+          {
+            "title": "Retrofit blocos — backlog seed from the P2-xx roadmaps, `flutter` + `ts-firebase` overlays, consider Greptile parity",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          }
+        ],
+        "Later": [
+          {
+            "title": "P4 · Worktree awareness + write-back (drag to restatus edits the backlog line)",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          },
+          {
+            "title": "P5 · Skeleton extraction + `opc new` for future projects",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          }
+        ],
+        "Done": [
+          {
+            "title": "P0 · Create the hub + scratch layout; register blocos and gymbloc",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          },
+          {
+            "title": "P1 · Core fragments drafted; `opc sync` v0 composes the hub's own AGENTS.md and generated files",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          },
+          {
+            "title": "P1 · Docs split refined: `docs/guides/` added for human how-tos",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          }
+        ]
+      },
+      "docs": [],
+      "promptSessions": [],
+      "legacyPromptFiles": 0
+    }
+  ]
+};</script>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+let DATA = window.__DATA__ || null;
+const state = { tab: "board", project: "all" };
+const colors = new Map();
+const colorOf = (id) => { if (!colors.has(id)) colors.set(id, "var(--p" + ((colors.size % 3) + 1) + ")"); return colors.get(id); };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const icon = (ok) => ok ? "☑" : "☐";
+
+const filtered = () => state.project === "all" ? DATA.projects : DATA.projects.filter((p) => p.id === state.project);
+const backlogOf = (p) => p.backlog || { Now: [], Next: [], Later: [], Done: [] };
+const allBacklog = () => filtered().flatMap((p) => ["Now", "Next", "Later", "Done"].flatMap((s) => backlogOf(p)[s]));
+const docsOf = (p) => p.docs || [];
+const allDocs = () => filtered().flatMap((p) => docsOf(p).map((d) => ({ ...d, project: p.id })));
+const sessionsOf = (p) => p.promptSessions || [];
+const allSessions = () => filtered().flatMap((p) => sessionsOf(p).map((s) => ({ ...s, project: p.id })));
+
+function chip(id, name, extra) {
+  return '<span class="chip' + (state.project === id ? " on" : "") + '" data-project="' + id + '">' +
+    '<span class="dot" style="background:' + (id === "all" ? "var(--mut)" : colorOf(id)) + '"></span>' +
+    esc(name) + (extra ? ' <span class="tag">' + esc(extra) + "</span>" : "") + "</span>";
+}
+
+function renderChips() {
+  const pending = DATA.projects.filter((p) => p.exists && !p.backlog).length;
+  $("#chips").innerHTML =
+    chip("all", "All") +
+    DATA.projects.map((p) => chip(p.id, p.id, !p.exists ? "missing" : !p.backlog ? "pending retrofit" : null)).join("");
+}
+
+function renderTabs() {
+  const rfcCount = allDocs().filter((d) => ["rfc", "adr"].includes(d.type)).length;
+  const docsCount = allDocs().length;
+  const sessCount = allSessions().length;
+  const tabs = [
+    ["board", "Board"],
+    ["rfcs", "RFCs", rfcCount],
+    ["docs", "Docs", docsCount],
+    ["prompts", "Prompts", sessCount],
+  ];
+  $("#tabs").innerHTML = tabs.map(([id, label, n]) =>
+    '<button class="tab' + (state.tab === id ? " on" : "") + '" data-tab="' + id + '">' + label +
+    (n ? '<span class="n">' + n + "</span>" : "") + "</button>").join("");
+}
+
+function renderBoard() {
+  const pending = filtered().filter((p) => !p.exists || !p.backlog);
+  const banner = pending.length
+    ? '<div class="banner">' + pending.map((p) => "<b>" + esc(p.id) + "</b>" + (p.exists ? " — registered, waiting for its retrofit (no <span class=\"mono\">docs/backlog.md</span> yet)" : " — path missing")).join("<br>") + "</div>"
+    : "";
+  const cols = ["Now", "Next", "Later", "Done"].map((s) => {
+    const items = filtered().flatMap((p) => backlogOf(p)[s].map((i) => ({ ...i, project: p.id })));
+    const cards = items.length ? items.map((i) => {
+      const meta = [
+        '<span class="dot" style="background:' + colorOf(i.project) + '"></span>' + esc(i.project),
+        i.spec ? '<span class="tag">spec ↗</span>' : "",
+        i.priority ? '<span class="tag">' + esc(i.priority) + "</span>" : "",
+        i.date ? '<span class="tag">' + esc(i.date) + "</span>" : "",
+      ].filter(Boolean).join(" ");
+      return '<div class="card' + (i.checked ? " done" : "") + '"><div class="t">' + icon(i.checked) + " " + esc(i.title) + '</div><div class="meta">' + meta + "</div></div>";
+    }).join("") : '<div class="empty">—</div>';
+    return '<div class="col"><div class="hd">' + s + " <em>" + items.length + "</em></div>" + cards + "</div>";
+  }).join("");
+  return banner + '<div class="cols">' + cols + "</div>";
+}
+
+function renderRfcs() {
+  const items = allDocs().filter((d) => ["rfc", "adr"].includes(d.type));
+  if (!items.length) return '<div class="empty">No RFCs or ADRs with board headers yet.</div>';
+  return '<div class="list">' + items.map((d) => {
+    const cls = d.status === "accepted" || d.status === "done" ? "ok" : d.status === "proposed" ? "warn" : "";
+    return '<div class="card"><div class="t"><span class="tag">' + esc(d.type.toUpperCase()) + "</span> " + esc(d.title) + "</div>" +
+      '<div class="meta"><span class="dot" style="background:' + colorOf(d.project) + '"></span>' + esc(d.project) +
+      ' <span class="tag ' + cls + '">' + esc(d.status || "?") + "</span>" +
+      (d.date ? " " + esc(d.date) : "") + ' <span class="mono">' + esc(d.file) + "</span></div></div>";
+  }).join("") + "</div>";
+}
+
+function renderDocs() {
+  const items = allDocs();
+  if (!items.length) return '<div class="empty">No docs with board headers yet.</div>';
+  return "<table><thead><tr><th>project</th><th>type</th><th>status</th><th>date</th><th>title</th><th>path</th></tr></thead><tbody>" +
+    items.map((d) => "<tr><td class='mono'><span class='dot' style='display:inline-block;background:" + colorOf(d.project) + "'></span> " + esc(d.project) + "</td><td>" + esc(d.type || "") + "</td><td>" + esc(d.status || "") + "</td><td class='mono'>" + esc(d.date || "") + "</td><td>" + esc(d.title) + "</td><td class='mono'>" + esc(d.file) + "</td></tr>").join("") +
+    "</tbody></table>";
+}
+
+function renderPrompts() {
+  const groups = filtered().map((p) => {
+    const sessions = sessionsOf(p);
+    const legacy = p.legacyInRepoPrompts || p.legacyPromptFiles;
+    const legacyNote = legacy ? '<div class="empty">' + legacy + " legacy prompt file(s) still inside the repo — move to scratch at retrofit</div>" : "";
+    if (!sessions.length && !legacyNote) return "";
+    const cards = sessions.map((s) => {
+      const age = Math.round((Date.now() - new Date(s.mtime + "T12:00:00").getTime()) / 86400000);
+      const stale = age > 7 ? ' <span class="tag warn">stale ' + age + "d</span>" : "";
+      return '<div class="card"><div class="t">📁 ' + esc(s.name) + '</div><div class="meta">' + s.files + " file(s)" + (s.date ? " · " + esc(s.date) : "") + stale + "</div></div>";
+    }).join("");
+    return '<div><div class="hd mono" style="color:var(--mut);font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin:4px 0 8px"><span class="dot" style="display:inline-block;background:' + colorOf(p.id) + '"></span> ' + esc(p.id) + "</div><div class='sessions'>" + cards + "</div>" + legacyNote + "</div>";
+  }).join("");
+  return groups || '<div class="empty">No active prompt sessions in scratch.</div>';
+}
+
+function renderFoot() {
+  const projs = filtered();
+  $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc board` for the live board · "
+    : "live · data rescans on every load · ") +
+    projs.map((p) => p.id + (p.branch ? "@" + p.branch : "") + (p.dirty ? " ✎" + p.dirty : "")).join("  ·  ");
+}
+
+function render() {
+  if (!DATA) return;
+  $("#gen").textContent = "generated " + new Date(DATA.generatedAt).toLocaleString();
+  renderChips();
+  renderTabs();
+  const views = { board: renderBoard, rfcs: renderRfcs, docs: renderDocs, prompts: renderPrompts };
+  $("#view").innerHTML = views[state.tab]();
+  renderFoot();
+  document.getElementById("rescan").style.display = window.__DATA__ ? "none" : "";
+}
+
+document.addEventListener("click", (e) => {
+  const chipEl = e.target.closest("[data-project]");
+  if (chipEl) { state.project = chipEl.dataset.project; render(); return; }
+  const tabEl = e.target.closest("[data-tab]");
+  if (tabEl) { state.tab = tabEl.dataset.tab; render(); return; }
+  if (e.target.id === "rescan") { DATA = null; load(); }
+});
+
+async function load() {
+  if (!DATA) {
+    try { DATA = await (await fetch("./data.json", { cache: "no-store" })).json(); }
+    catch (err) { $("#view").innerHTML = '<div class="empty">data.json not readable — run `opc scan` first</div>'; return; }
+  }
+  colors.clear();
+  render();
+}
+load();
+</script>
+</body>
+</html>

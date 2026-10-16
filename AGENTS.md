@@ -162,6 +162,5 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   branches or PRs for this repo unless a change is risky.
 - Consistency: standardized projects are kept in line by `opc sync` and (soon)
   `opc check`. Drift is a bug, not a style choice.
-- Commands: `opc sync` (run after editing `standards/`); `opc lint`, `opc scan`,
-  `opc board`, `opc new` arrive with their backlog items.
+- Commands: `node scripts/opc.mjs sync` · `… scan` (refresh `board/data.json`; add `--snapshot` for a self-contained page) · `… board` (serve at localhost, rescans on every open). `opc check` and `opc new` arrive next.
 - The hub itself is registered in `projects.json`, so the board covers it.

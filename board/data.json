@@ -1,0 +1,128 @@
+{
+  "generatedAt": "2026-10-16T11:25:46.563Z",
+  "org": "One Person Company (alpha)",
+  "scratchRoot": "~/dev/.onepersonco",
+  "projects": [
+    {
+      "id": "blocos",
+      "name": "Blocos",
+      "path": "/Users/mateus/dev/blocos",
+      "standardized": false,
+      "exists": true,
+      "branch": "refactor/recurring-blocks",
+      "lastCommit": "2026-10-16 feat(onboarding): round-2 visual pass from owner feedback",
+      "dirty": 13,
+      "backlog": null,
+      "docs": [],
+      "promptSessions": [],
+      "legacyPromptFiles": 0
+    },
+    {
+      "id": "gymbloc",
+      "name": "Gymbloc",
+      "path": "/Users/mateus/dev/gymbloc",
+      "standardized": false,
+      "exists": true,
+      "branch": "main",
+      "lastCommit": "2026-10-15 Rewrite v0 status ledger as a short slice table (D10) (#33)",
+      "dirty": 0,
+      "backlog": null,
+      "docs": [],
+      "promptSessions": [],
+      "legacyPromptFiles": 108
+    },
+    {
+      "id": "onepersonco-alpha",
+      "name": "One Person Company (alpha)",
+      "path": "/Users/mateus/dev/onepersonco-alpha",
+      "standardized": true,
+      "exists": true,
+      "branch": "main",
+      "lastCommit": "2026-10-16 feat(standards): docs/guides for human how-tos; backlog reordered for the alpha-complete pass",
+      "dirty": 4,
+      "backlog": {
+        "Now": [
+          {
+            "title": "P3 · Finalize the alpha — dogfood pass: the hub follows everything it prescribes, the board renders it, checks come back green",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          }
+        ],
+        "Next": [
+          {
+            "title": "P4 · `opc check` — deterministic health: structure, drift (`sync` would change nothing), backlog lines, links; runs when the board opens, exit code for hooks",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          },
+          {
+            "title": "Retrofit gymbloc — managed blocks, `docs/internals/`, `backlog.md` seed, prompts → scratch, `swift-ios` overlay",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          },
+          {
+            "title": "Retrofit blocos — backlog seed from the P2-xx roadmaps, `flutter` + `ts-firebase` overlays, consider Greptile parity",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          }
+        ],
+        "Later": [
+          {
+            "title": "P4 · Worktree awareness + write-back (drag to restatus edits the backlog line); `opc` shim on PATH",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          },
+          {
+            "title": "P5 · Skeleton extraction + `opc new` for future projects",
+            "spec": null,
+            "priority": null,
+            "date": null,
+            "checked": false
+          }
+        ],
+        "Done": [
+          {
+            "title": "P0 · Create the hub + scratch layout; register blocos and gymbloc",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          },
+          {
+            "title": "P1 · Core fragments drafted; `opc sync` v0 composes the hub's own AGENTS.md and generated files",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          },
+          {
+            "title": "P1 · Docs split refined: `docs/guides/` added for human how-tos",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          },
+          {
+            "title": "P3 · Board v1 — `opc scan` + `opc board` + self-contained snapshot; kanban, RFCs, docs, prompts views",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          }
+        ]
+      },
+      "docs": [],
+      "promptSessions": [],
+      "legacyPromptFiles": 0
+    }
+  ]
+}

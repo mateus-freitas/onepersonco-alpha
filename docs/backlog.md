@@ -6,7 +6,6 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 
 ## Now
 
-- [ ] P3 · Board v1 — `opc scan` + localhost views (kanban, RFCs, prompts, evidence) from the registry and scratch
 - [ ] P3 · Finalize the alpha — dogfood pass: the hub follows everything it prescribes, the board renders it, checks come back green
 
 ## Next
@@ -17,7 +16,7 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 
 ## Later
 
-- [ ] P4 · Worktree awareness + write-back (drag to restatus edits the backlog line)
+- [ ] P4 · Worktree awareness + write-back (drag to restatus edits the backlog line); `opc` shim on PATH
 - [ ] P5 · Skeleton extraction + `opc new` for future projects
 
 ## Done (recent)
@@ -25,3 +24,4 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 - [x] P0 · Create the hub + scratch layout; register blocos and gymbloc — 2026-10-16
 - [x] P1 · Core fragments drafted; `opc sync` v0 composes the hub's own AGENTS.md and generated files — 2026-10-16
 - [x] P1 · Docs split refined: `docs/guides/` added for human how-tos — 2026-10-16
+- [x] P3 · Board v1 — `opc scan` + `opc board` + self-contained snapshot; kanban, RFCs, docs, prompts views — 2026-10-16
