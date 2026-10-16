@@ -25,10 +25,8 @@
   .chip.on{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
   .chip.on .dot{background:currentColor;border-color:currentColor}
   .dot{display:inline-block;width:6px;height:6px;border-radius:999px;flex:none}
-  .pa{background:var(--primary)}
-  .pb{background:color-mix(in srgb, var(--primary) 55%, var(--background))}
-  .pc{background:color-mix(in srgb, var(--primary) 30%, var(--background))}
-  .pd{background:color-mix(in srgb, var(--primary) 16%, var(--background))}
+  .pa{background:var(--project-1)} .pb{background:var(--project-2)} .pc{background:var(--project-3)}
+  .pd{background:var(--project-4)} .pe{background:var(--project-5)}
   .tabs{display:flex;gap:2px;background:var(--muted);padding:3px;border-radius:var(--radius);width:max-content;max-width:100%;flex-wrap:wrap}
   .tab{font:inherit;font-size:12px;padding:5px 12px;border-radius:var(--radius);border:none;background:transparent;color:var(--muted-foreground);cursor:pointer}
   .tab:hover{color:var(--foreground)}
@@ -81,7 +79,7 @@ const $ = (s, el = document) => el.querySelector(s);
 let DATA = window.__DATA__ || null;
 const state = { tab: "board", project: "all" };
 const pcls = new Map();
-const pclass = (id) => { if (!pcls.has(id)) pcls.set(id, ["pa", "pb", "pc", "pd"][pcls.size % 4]); return pcls.get(id); };
+const pclass = (id) => { if (!pcls.has(id)) pcls.set(id, ["pa", "pb", "pc", "pd", "pe"][pcls.size % 5]); return pcls.get(id); };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const icon = (ok) => ok ? "☑" : "☐";
 
