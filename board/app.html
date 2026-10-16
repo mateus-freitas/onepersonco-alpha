@@ -48,6 +48,10 @@
   .tag{font-size:9.5px;border:1px solid var(--border);border-radius:var(--radius);padding:1px 6px;color:var(--muted-foreground)}
   .tag.solid{background:var(--secondary);border-color:transparent;color:var(--secondary-foreground)}
   .tag.danger{color:var(--destructive);border-color:color-mix(in srgb, var(--destructive) 45%, transparent)}
+  .oplink{color:inherit;text-decoration:none;border-bottom:1px dotted transparent;cursor:pointer}
+  .oplink:hover{border-bottom-color:var(--border)}
+  #toast{position:fixed;right:16px;bottom:16px;background:var(--card);border:1px solid var(--border);color:var(--foreground);font-size:12px;padding:8px 12px;border-radius:var(--radius);opacity:0;transition:opacity .15s;pointer-events:none}
+  #toast.on{opacity:1}
   .list{display:flex;flex-direction:column;gap:8px}
   table{width:100%;border-collapse:collapse;font-size:12px}
   th{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600}
@@ -83,11 +87,30 @@ const pcls = new Map();
 const pclass = (id) => { if (!pcls.has(id)) pcls.set(id, ["pa", "pb", "pc", "pd", "pe"][pcls.size % 5]); return pcls.get(id); };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const icon = (ok) => ok ? "☑" : "☐";
+const LIVE = !window.__DATA__;
+let toastTimer = null;
+function toast(msg) {
+  let el = document.getElementById("toast");
+  if (!el) { el = document.createElement("div"); el.id = "toast"; document.body.appendChild(el); }
+  el.textContent = msg;
+  el.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("on"), 1600);
+}
+function absPath(baseDir, rel) {
+  if (!rel) return null;
+  if (rel.startsWith("~/")) return DATA.home ? DATA.home + rel.slice(1) : null;
+  return baseDir ? baseDir + "/" + rel : null;
+}
+function opLink(text, path, tip) {
+  if (!LIVE || !path) return esc(text);
+  return '<a class="oplink" href="/open?path=' + encodeURIComponent(path) + '" title="' + esc(tip || "Open " + path) + '">' + esc(text) + "</a>";
+}
 
 const filtered = () => state.project === "all" ? DATA.projects : DATA.projects.filter((p) => p.id === state.project);
 const backlogOf = (p) => p.backlog || { Now: [], Next: [], Later: [], Done: [] };
 const docsOf = (p) => p.docs || [];
-const allDocs = () => filtered().flatMap((p) => docsOf(p).map((d) => ({ ...d, project: p.id })));
+const allDocs = () => filtered().flatMap((p) => docsOf(p).map((d) => ({ ...d, project: p.id, projectPath: p.path })));
 const sessionsOf = (p) => p.promptSessions || [];
 const allSessions = () => filtered().flatMap((p) => sessionsOf(p).map((s) => ({ ...s, project: p.id })));
 
@@ -126,11 +149,11 @@ function renderBoard() {
     ? '<div class="banner">opc check reports <b>' + esc(h.errors) + (Number(h.errors) === 1 ? " error" : " errors") + "</b> — open the Health tab</div>"
     : "";
   const cols = ["Now", "Next", "Later", "Done"].map((s) => {
-    const items = filtered().flatMap((p) => backlogOf(p)[s].map((i) => ({ ...i, project: p.id })));
+    const items = filtered().flatMap((p) => backlogOf(p)[s].map((i) => ({ ...i, project: p.id, projectPath: p.path })));
     const cards = items.length ? items.map((i) => {
       const meta = [
         '<span class="dot ' + pclass(i.project) + '"></span>' + esc(i.project),
-        i.spec ? '<span class="tag">spec ↗</span>' : "",
+        i.spec ? '<span class="tag">' + opLink("spec ↗", absPath(i.projectPath, i.spec)) + "</span>" : "",
         i.priority ? '<span class="tag">' + esc(i.priority) + "</span>" : "",
         i.date ? '<span class="tag">' + esc(i.date) + "</span>" : "",
       ].filter(Boolean).join(" ");
@@ -148,14 +171,14 @@ function renderRfcs() {
     '<div class="card"><div class="t"><span class="tag">' + esc((d.type || "").toUpperCase()) + "</span> " + esc(d.title) + "</div>" +
     '<div class="meta"><span class="dot ' + pclass(d.project) + '"></span>' + esc(d.project) +
     ' <span class="tag' + (["accepted", "done"].includes(d.status) ? " solid" : "") + '">' + esc(d.status || "?") + "</span>" +
-    (d.date ? " <span class=\"tag\">" + esc(d.date) + "</span>" : "") + ' <span class="mono">' + esc(d.file) + "</span></div></div>").join("") + "</div>";
+    (d.date ? " <span class=\"tag\">" + esc(d.date) + "</span>" : "") + ' <span class="mono">' + opLink(d.file, absPath(d.projectPath, d.file)) + "</span></div></div>").join("") + "</div>";
 }
 
 function renderDocs() {
   const items = allDocs();
   if (!items.length) return '<div class="empty">No docs with board headers yet.</div>';
   return "<table><thead><tr><th>project</th><th>type</th><th>status</th><th>date</th><th>title</th><th>path</th></tr></thead><tbody>" +
-    items.map((d) => "<tr><td class='mono'><span class='dot " + pclass(d.project) + "'></span> " + esc(d.project) + "</td><td>" + esc(d.type || "") + "</td><td>" + esc(d.status || "") + "</td><td class='mono'>" + esc(d.date || "") + "</td><td>" + esc(d.title) + "</td><td class='mono'>" + esc(d.file) + "</td></tr>").join("") +
+    items.map((d) => "<tr><td class='mono'><span class='dot " + pclass(d.project) + "'></span> " + esc(d.project) + "</td><td>" + esc(d.type || "") + "</td><td>" + esc(d.status || "") + "</td><td class='mono'>" + esc(d.date || "") + "</td><td>" + esc(d.title) + "</td><td class='mono'>" + opLink(d.file, absPath(d.projectPath, d.file)) + "</td></tr>").join("") +
     "</tbody></table>";
 }
 
@@ -167,7 +190,7 @@ function renderPrompts() {
     const cards = sessions.map((s) => {
       const age = Math.round((Date.now() - new Date(s.mtime + "T12:00:00").getTime()) / 86400000);
       const stale = age > 7 ? ' <span class="tag danger">stale ' + age + "d</span>" : "";
-      return '<div class="card"><div class="t">' + esc(s.name) + '</div><div class="meta"><span class="mono">' + s.files + " file(s)" + (s.date ? " · " + esc(s.date) : "") + "</span>" + stale + "</div></div>";
+      return '<div class="card"><div class="t">📁 ' + opLink(s.name, s.path) + '</div><div class="meta"><span class="mono">' + s.files + " file(s)" + (s.date ? " · " + esc(s.date) : "") + "</span>" + stale + "</div></div>";
     }).join("");
     if (!sessions.length && !legacyNote) return "";
     return '<div><div class="group-hd"><span class="dot ' + pclass(p.id) + '"></span>' + esc(p.id) + '</div><div class="sessions">' + (cards || '<div class="empty">no active sessions in scratch</div>') + "</div>" + legacyNote + "</div>";
@@ -182,7 +205,8 @@ function renderHealth() {
     const items = findings.filter((f) => f.project === p.id);
     if (!items.length) return "";
     const cards = items.map((f) => {
-      const file = f.file ? '<div class="meta"><span class="mono">' + esc(f.file) + "</span></div>" : "";
+      const proj = DATA.projects.find((x) => x.id === f.project);
+      const file = f.file && proj ? '<div class="meta"><span class="mono">' + opLink(f.file, absPath(proj.path, f.file)) + "</span></div>" : "";
       return '<div class="card"><div class="t"><span class="' + (f.level === "error" ? "tag danger" : "tag") + '">' + esc(f.level) +
         '</span> <span class="mono">' + esc(f.code) + "</span> " + esc(f.message) + "</div>" + file + "</div>";
     }).join("");
@@ -192,7 +216,7 @@ function renderHealth() {
 }
 
 function renderFoot() {
-  $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc board` for the live board · " : "live · data rescans on every load · ") +
+  $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc board` for the live board · " : "live · data rescans on every load · click paths to open locally · ") +
     filtered().map((p) => p.id + (p.branch ? "@" + p.branch : "") + (p.dirty ? " ✎" + p.dirty : "")).join("  ·  ");
 }
 
@@ -210,6 +234,14 @@ function render() {
 }
 
 document.addEventListener("click", (e) => {
+  const link = e.target.closest("a.oplink");
+  if (link) {
+    e.preventDefault();
+    fetch(link.getAttribute("href"))
+      .then((r) => toast(r.ok ? "opened" : "not found"))
+      .catch(() => toast("could not open"));
+    return;
+  }
   const chipEl = e.target.closest("[data-project]");
   if (chipEl) { state.project = chipEl.dataset.project; render(); return; }
   const tabEl = e.target.closest("[data-tab]");

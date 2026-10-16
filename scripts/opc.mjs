@@ -187,6 +187,7 @@ function listPromptSessions(scratchRoot, id) {
       const dateM = e.name.match(/^(\d{4}-\d{2}-\d{2})/);
       return {
         name: e.name,
+        path: full,
         date: dateM ? dateM[1] : null,
         files,
         mtime: fs.statSync(full).mtime.toISOString().slice(0, 10),
@@ -240,6 +241,7 @@ function scanAll() {
     generatedAt: new Date().toISOString(),
     org: registry.org,
     scratchRoot: registry.scratchRoot,
+    home: os.homedir(),
     health,
     projects,
   };
@@ -466,6 +468,29 @@ function cmdBoard(args) {
       fs.writeFileSync(path.join(boardDir, "data.json"), JSON.stringify(data, null, 2));
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       return res.end(JSON.stringify(data));
+    }
+    if (name === "open") {
+      // Local convenience: hand an allowlisted path to the OS opener.
+      const raw = url.searchParams.get("path") || "";
+      if (!raw) { res.writeHead(400); return res.end("missing path"); }
+      const target = raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(2)) : path.resolve(raw);
+      if (!fs.existsSync(target)) { res.writeHead(404); return res.end("not found"); }
+      const real = (p) => { try { return fs.realpathSync(p); } catch { return null; } };
+      const roots = [
+        HUB,
+        expand(registry.scratchRoot),
+        path.join(os.homedir(), "dev", "agents-worktrees"),
+        ...registry.projects.map((p) => expand(p.path)),
+      ];
+      const realTarget = real(target);
+      const allowed = realTarget && roots.some((r) => {
+        const rr = real(r);
+        return rr && (realTarget === rr || realTarget.startsWith(rr + path.sep));
+      });
+      if (!allowed) { res.writeHead(403); return res.end("path outside the allowed roots"); }
+      spawnSync(process.platform === "darwin" ? "open" : "xdg-open", [realTarget]);
+      res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      return res.end(`opened ${realTarget}`);
     }
     const file = path.join(boardDir, name);
     if (!name.includes("..") && fs.existsSync(file) && fs.statSync(file).isFile()) {
