@@ -4,6 +4,9 @@
   "version": "0.0.1",
   "description": "One Person Company (alpha) — shared standards, project registry and local board",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "opc": "scripts/opc.mjs"
   }

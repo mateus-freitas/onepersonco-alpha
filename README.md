@@ -22,7 +22,7 @@ Machine-local working data — scratch, worktrees, trash — lives *outside* eve
 repo in the hidden sibling `~/dev/.onepersonco/` (see its README). Nothing
 there is committed; scratch is safe to delete, worktrees are live checkouts.
 
-## Getting started — a new machine
+## Getting started
 
 The scenario this covers: a fresh computer, the projects already cloned
 (`~/dev/blocos`, `~/dev/gymbloc`, …), and this hub cloned next to them.
@@ -30,7 +30,7 @@ Fifteen minutes, no global installs beyond what npx fetches on demand.
 
 ### 1 · Prerequisites
 
-- macOS with `git`, Node ≥ 20 (`node --version`), and `python3` (system is fine)
+- macOS with `git`, Node ≥ 20 (`node --version`; the repo ships `.nvmrc`, so `nvm use` picks the right one), and `python3` (system is fine)
 - GitHub access set up (`ssh -T git@github.com` greets you; `gh auth status` if
   you want the CLI) — needed to push, and the skills repo is public
 
@@ -45,9 +45,13 @@ git clone git@github.com:mateus-freitas/onepersonco-alpha.git
 
 ```sh
 cd ~/dev/onepersonco-alpha
-npm link          # installs the `opc` bin into your Node bin directory
+nvm use           # repo ships .nvmrc (Node 24); run nvm install first if nvm asks
+npm link          # installs the `opc` bin for the active Node version
 opc               # prints usage
 ```
+
+With nvm, the link belongs to the active Node version — if `opc` ever goes
+missing after switching versions, `nvm use` and `npm link` again.
 
 ### 4 · Create the machine-local working data
 
