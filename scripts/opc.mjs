@@ -238,14 +238,13 @@ function cmdScan(args) {
 function cmdBoard(args) {
   const portIdx = args.indexOf("--port");
   const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 4770;
-  const appHtml = fs.readFileSync(path.join(boardDir, "app.html"), "utf8");
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const name = url.pathname === "/" ? "app.html" : url.pathname.replace(/^\/+/, "");
     if (name === "app.html" || name === "index.html") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      return res.end(appHtml);
+      return res.end(fs.readFileSync(path.join(boardDir, "app.html"), "utf8"));
     }
     if (name === "data.json") {
       const data = scanAll();
@@ -261,6 +260,15 @@ function cmdBoard(args) {
     }
     res.writeHead(404);
     res.end("not found");
+  });
+
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`opc board: port ${port} is already in use — another board is probably running (kill it, or use --port <N>)`);
+    } else {
+      console.error(`opc board: ${err.message}`);
+    }
+    process.exit(1);
   });
 
   const data = scanAll();

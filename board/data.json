@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T12:39:50.882Z",
+  "generatedAt": "2026-10-16T12:40:00.580Z",
   "org": "One Person Company (alpha)",
   "scratchRoot": "~/dev/.onepersonco",
   "projects": [
@@ -38,8 +38,8 @@
       "standardized": true,
       "exists": true,
       "branch": "main",
-      "lastCommit": "2026-10-16 feat(opc): board v1 — scan, localhost serve, snapshot",
-      "dirty": 5,
+      "lastCommit": "2026-10-16 feat(board): adopt the shadcn preset theme — global.css, readable defaults, dark toggle",
+      "dirty": 0,
       "backlog": {
         "Now": [
           {
