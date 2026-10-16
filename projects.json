@@ -15,6 +15,13 @@
       "path": "~/dev/gymbloc",
       "stack": ["swift", "ios"],
       "docs": "docs"
+    },
+    {
+      "id": "onepersonco-alpha",
+      "name": "One Person Company (alpha)",
+      "path": "~/dev/onepersonco-alpha",
+      "stack": ["node", "ts"],
+      "docs": "docs"
     }
   ]
 }
