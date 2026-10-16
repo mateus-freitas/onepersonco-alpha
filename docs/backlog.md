@@ -6,20 +6,22 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 
 ## Now
 
-- [ ] P1 · Write the shared standards fragments (git/PR, docs discipline, backlog, agent selection, platform overlays)
-- [ ] P1 · Retrofit gymbloc: managed AGENTS.md blocks, docs/internals, backlog seed, prompts → scratch
+- [ ] P3 · Board v1 — `opc scan` + localhost views (kanban, RFCs, prompts, evidence) from the registry and scratch
+- [ ] P3 · Finalize the alpha — dogfood pass: the hub follows everything it prescribes, the board renders it, checks come back green
 
 ## Next
 
-- [ ] P2 · Retrofit blocos: backlog seed (from the P2-xx roadmaps), module layering kept
-- [ ] P3 · Board v1: `opc scan` + localhost views (kanban, RFCs, prompts, evidence)
+- [ ] P4 · `opc check` — deterministic health: structure, drift (`sync` would change nothing), backlog lines, links; runs when the board opens, exit code for hooks
+- [ ] Retrofit gymbloc — managed blocks, `docs/internals/`, `backlog.md` seed, prompts → scratch, `swift-ios` overlay
+- [ ] Retrofit blocos — backlog seed from the P2-xx roadmaps, `flutter` + `ts-firebase` overlays, consider Greptile parity
 
 ## Later
 
-- [ ] P4 · Guardrails: `opc lint`, pre-commit hook, worktree awareness, write-back
+- [ ] P4 · Worktree awareness + write-back (drag to restatus edits the backlog line)
 - [ ] P5 · Skeleton extraction + `opc new` for future projects
 
 ## Done (recent)
 
 - [x] P0 · Create the hub + scratch layout; register blocos and gymbloc — 2026-10-16
-- [x] P1 · `opc sync` v0 — the hub composes its own AGENTS.md and generated files from the fragments — 2026-10-16
+- [x] P1 · Core fragments drafted; `opc sync` v0 composes the hub's own AGENTS.md and generated files — 2026-10-16
+- [x] P1 · Docs split refined: `docs/guides/` added for human how-tos — 2026-10-16

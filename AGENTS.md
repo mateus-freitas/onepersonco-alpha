@@ -75,9 +75,14 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 ### Audience split
 
-- `docs/internals/` — for agents and contributors: decisions, cross-component
-  constraints, and implementation traps that are hard to discover from source,
-  plus how-tos ("add a component", "run the gates").
+- `docs/internals/` — the working reference for agents and contributors:
+  decisions, cross-component constraints, and implementation traps that are hard
+  to discover from source. Terse, decision-focused; no feature catalogs, file
+  trees, or control-flow narration.
+- `docs/guides/` — step-by-step how-tos for people working with the code
+  ("add a block type", "add a component", "run the gates"): concise, plain
+  language, written for a human to work through. Written on demand when a flow
+  is genuinely non-obvious — not for everything the code already answers.
 - `docs/user/` — for product users, in the product's voice: what it does, how to
   start, anything unintuitive. No implementation detail.
 - `docs/operations/` — maintainer setup, release, and debugging procedures.
@@ -155,6 +160,8 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 - PR policy: **direct** — conventional commit titles straight to `main`; no
   branches or PRs for this repo unless a change is risky.
+- Consistency: standardized projects are kept in line by `opc sync` and (soon)
+  `opc check`. Drift is a bug, not a style choice.
 - Commands: `opc sync` (run after editing `standards/`); `opc lint`, `opc scan`,
   `opc board`, `opc new` arrive with their backlog items.
 - The hub itself is registered in `projects.json`, so the board covers it.
