@@ -15,6 +15,7 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 ## Later
 
 - [ ] P4 · Worktree awareness for `opc sync`/`check` — target the active worktree, not the registry's main checkout (a live sync wrote into gymbloc's main during the retrofit; reverted by hand)
+- [ ] P4 · First OPC skill — `opc-task-loop` (end-of-task loop + docs-placement decisions), synced via `opc-file`; evaluate auto-trigger on Claude/OpenCode and the AGENTS pointer for Codex
 - [ ] P4 · Board write-back (drag to restatus edits the backlog line)
 - [ ] Lifetime · Fold legacy worktrees (`~/dev/agents-worktrees/`, `~/dev/*-wt-*`) into the worktrees root as they finish
 - [ ] P5 · Skeleton extraction + `opc new` for future projects
