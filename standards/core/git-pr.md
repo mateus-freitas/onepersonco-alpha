@@ -17,8 +17,16 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 ### Work on one objective
 
-- One objective per branch and PR; start from refreshed `origin/main`; use a
-  descriptive branch name. Continue the existing branch when updating its PR.
+- One objective per branch and PR; start from refreshed `origin/main`. Continue
+  the existing branch when updating its PR.
+- Branch names carry intent first: `<type>/<slug>` with the conventional types
+  (`feat/`, `fix/`, `docs/`, `chore/`, `refactor/`, `test/`, `perf/`), e.g.
+  `feat/rest-timer`, `chore/opc-retrofit`. When several agents run concurrently
+  and authorship adds signal, prefix the agent that actually authored the
+  branch — `claude/…`, `opencode/…`, `codex/…`, `deepseek/…`, e.g.
+  `opencode/feat/gymbloc-retrofit`. The prefix is optional and must be truthful;
+  the old default of every branch carrying `codex/` regardless of the author is
+  retired.
 - Never push to `main`, force-push, or rewrite shared history as routine cleanup.
 - Preserve unrelated changes in a dirty worktree; stage explicit paths or hunks
   and check the staged diff before committing.
