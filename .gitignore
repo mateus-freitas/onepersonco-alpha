@@ -1,0 +1,6 @@
+# Local skills-tool state (project-scope installs) — never committed.
+.agents/
+skills-lock.json
+
+# Local dependencies
+node_modules/
