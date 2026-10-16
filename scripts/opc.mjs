@@ -17,7 +17,7 @@ const HUB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registry = JSON.parse(fs.readFileSync(path.join(HUB, "projects.json"), "utf8"));
 const coreDir = path.join(HUB, "standards", "core");
 const platformsDir = path.join(HUB, "standards", "platforms");
-const consoleDir = path.join(HUB, "board");
+const consoleDir = path.join(HUB, "console");
 
 const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
 const SECTIONS = ["Now", "Next", "Later", "Done"];
