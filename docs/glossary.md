@@ -16,6 +16,8 @@ this is not a feature index.
   delete, not a source of truth. Durable knowledge graduates into a repo.
 - **Backlog line** — one line in a project's `docs/backlog.md`; the only task
   format agents write.
-- **Board** — the local web app (`opc board`) that scans projects + scratch and
-  renders the kanban, RFCs, prompts and evidence views.
-- **opc** — the CLI in `scripts/` (sync · lint · scan · board · new).
+- **Console** — the local web app (`opc console`) that scans projects + scratch
+  and renders the kanban board, worktrees, RFCs, prompts and evidence views.
+- **Board** — the kanban view (tab) inside the console.
+- **opc** — the CLI in `scripts/` (sync · check · scan · console; `new` comes
+  with the skeleton).

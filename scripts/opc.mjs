@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// opc — the One Person Company CLI (alpha): sync · check · scan · board
+// opc — the One Person Company CLI (alpha): sync · check · scan · console
 //
 // sync   compose standards fragments (core + matching platforms) into standardized projects
 // check  deterministic health checks for every registered project
-// scan   write board/data.json (+ --snapshot for a self-contained page)
-// board  serve the local board; /data.json rescans on every load
+// scan   write console/data.json (+ --snapshot for a self-contained page)
+// console serve the local console; /data.json rescans on every load
 
 import fs from "node:fs";
 import path from "node:path";
@@ -17,7 +17,7 @@ const HUB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registry = JSON.parse(fs.readFileSync(path.join(HUB, "projects.json"), "utf8"));
 const coreDir = path.join(HUB, "standards", "core");
 const platformsDir = path.join(HUB, "standards", "platforms");
-const boardDir = path.join(HUB, "board");
+const consoleDir = path.join(HUB, "board");
 
 const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
 const SECTIONS = ["Now", "Next", "Later", "Done"];
@@ -367,30 +367,30 @@ function scanAll() {
 
 function cmdScan(args) {
   const data = scanAll();
-  fs.mkdirSync(boardDir, { recursive: true });
+  fs.mkdirSync(consoleDir, { recursive: true });
   const json = JSON.stringify(data, null, 2);
-  fs.writeFileSync(path.join(boardDir, "data.json"), json);
+  fs.writeFileSync(path.join(consoleDir, "data.json"), json);
   const lines = data.projects.reduce((n, p) => {
     if (!p.backlog) return n;
     return n + SECTIONS.reduce((m, s) => m + p.backlog[s].length, 0);
   }, 0);
-  console.log(`board/data.json written — ${data.projects.length} project(s), ${lines} backlog line(s)`);
+  console.log(`console/data.json written — ${data.projects.length} project(s), ${lines} backlog line(s)`);
   if (args.includes("--snapshot")) {
-    const css = fs.readFileSync(path.join(boardDir, "global.css"), "utf8");
+    const css = fs.readFileSync(path.join(consoleDir, "global.css"), "utf8");
     const app = fs
-      .readFileSync(path.join(boardDir, "app.html"), "utf8")
+      .readFileSync(path.join(consoleDir, "app.html"), "utf8")
       .replace('<link rel="stylesheet" href="global.css">', `<style>\n${css}\n</style>`);
     const safe = json.replace(/</g, "\\u003c");
     const injected = app.replace("<!--__DATA__-->", `<script>window.__DATA__ = ${safe};</` + `script>`);
-    fs.writeFileSync(path.join(boardDir, "snapshot.html"), injected);
-    console.log("board/snapshot.html written — self-contained page");
+    fs.writeFileSync(path.join(consoleDir, "snapshot.html"), injected);
+    console.log("console/snapshot.html written — self-contained page");
   }
 }
 
 // ---------------------------------------------------------------- check
 
 // Deterministic findings for every registered project — no network, no AI.
-// The same health object powers `opc check`, scan's data.health and the board.
+// The same health object powers `opc check`, scan's data.health and the console.
 
 const DOC_TYPES = ["rfc", "adr", "plan", "internals", "evidence", "guide"];
 const DOC_STATUSES = ["draft", "review", "accepted", "done"];
@@ -585,9 +585,9 @@ function cmdCheck(args) {
   process.exitCode = health.errors > 0 ? 1 : 0;
 }
 
-// ---------------------------------------------------------------- board
+// ---------------------------------------------------------------- console
 
-function cmdBoard(args) {
+function cmdConsole(args) {
   const portIdx = args.indexOf("--port");
   const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 4770;
 
@@ -596,11 +596,11 @@ function cmdBoard(args) {
     const name = url.pathname === "/" ? "app.html" : url.pathname.replace(/^\/+/, "");
     if (name === "app.html" || name === "index.html") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      return res.end(fs.readFileSync(path.join(boardDir, "app.html"), "utf8"));
+      return res.end(fs.readFileSync(path.join(consoleDir, "app.html"), "utf8"));
     }
     if (name === "data.json") {
       const data = scanAll();
-      fs.writeFileSync(path.join(boardDir, "data.json"), JSON.stringify(data, null, 2));
+      fs.writeFileSync(path.join(consoleDir, "data.json"), JSON.stringify(data, null, 2));
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       return res.end(JSON.stringify(data));
     }
@@ -628,7 +628,7 @@ function cmdBoard(args) {
       res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
       return res.end(`opened ${realTarget}`);
     }
-    const file = path.join(boardDir, name);
+    const file = path.join(consoleDir, name);
     if (!name.includes("..") && fs.existsSync(file) && fs.statSync(file).isFile()) {
       const type = name.endsWith(".css") ? "text/css" : name.endsWith(".html") ? "text/html" : "text/plain";
       res.writeHead(200, { "content-type": `${type}; charset=utf-8` });
@@ -640,9 +640,9 @@ function cmdBoard(args) {
 
   server.on("error", (err) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`opc board: port ${port} is already in use — another board is probably running (kill it, or use --port <N>)`);
+      console.error(`opc console: port ${port} is already in use — another console is probably running (kill it, or use --port <N>)`);
     } else {
-      console.error(`opc board: ${err.message}`);
+      console.error(`opc console: ${err.message}`);
     }
     process.exit(1);
   });
@@ -652,7 +652,7 @@ function cmdBoard(args) {
   const healthLine = h.errors + h.warnings + h.infos ? `health: ${healthCounts(h)}` : "health: clean";
   const pending = data.projects.filter((p) => p.exists && !p.backlog).map((p) => p.id);
   server.listen(port, () => {
-    console.log(`opc board → http://localhost:${port}`);
+    console.log(`opc console → http://localhost:${port}`);
     console.log(healthLine);
     console.log(`pending retrofit: ${pending.length ? pending.join(", ") : "none"} — data rescans on every load`);
   });
@@ -665,8 +665,8 @@ function main() {
   if (cmd === "sync") return cmdSync(args);
   if (cmd === "check") return cmdCheck(args);
   if (cmd === "scan") return cmdScan(args);
-  if (cmd === "board") return cmdBoard(args);
-  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write board/data.json (and a self-contained snapshot.html)\n  opc board [--port N]    serve the board at http://localhost:N\n  sync/check follow the checkout you run them from; --dir overrides");
+  if (cmd === "console") return cmdConsole(args);
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N]  serve the console at http://localhost:N\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 

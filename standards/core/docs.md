@@ -43,5 +43,5 @@
 
 ### Headers
 
-- Docs that belong on the board carry the 4-line header (type · status · date)
+- Docs that belong in the console carry the 4-line header (type · status · date)
   from `templates/doc-header.md`. Everything else is plain markdown.

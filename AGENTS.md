@@ -1,7 +1,7 @@
 # onepersonco-alpha — hub instructions
 
 This repository is the internal control room: the source of the shared agent
-standards, the project registry, the skeleton for new projects, and the board.
+standards, the project registry, the skeleton for new projects, and the console.
 It never contains project code. We follow our own rules here — this repo is the
 first consumer of everything `standards/` prescribes.
 
@@ -11,9 +11,9 @@ first consumer of everything `standards/` prescribes.
   blocks below and into generated files. Source of truth for every shared rule —
   never edit a synced block or generated file by hand.
 - `projects.json` — the registry; registering a project is all it takes for the
-  board to see it (`standardized` marks retrofitted projects).
+  console to see it (`standardized` marks retrofitted projects).
 - `skeleton/` — template extracted for new projects
-- `board/` — the local board (scan → index → localhost UI)
+- `console/` — the local console (scan → index → localhost UI)
 - `scripts/` — the `opc` CLI
 - `docs/` — backlog, internals, glossary, evidence (see `docs/README.md`)
 - Scratch: `~/dev/.onepersonco/onepersonco-alpha/` — never commit scratch
@@ -137,7 +137,7 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 ### Headers
 
-- Docs that belong on the board carry the 4-line header (type · status · date)
+- Docs that belong in the console carry the 4-line header (type · status · date)
   from `templates/doc-header.md`. Everything else is plain markdown.
 <!-- opc:end docs -->
 
@@ -224,5 +224,5 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   `opc check`. Drift is a bug, not a style choice.
 - Skills: after editing `skills/`, run `npx skills update` so every harness
   picks the change up.
-- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc board` (rescans on every open). `opc new` arrives with the skeleton.
-- The hub itself is registered in `projects.json`, so the board covers it.
+- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc console` (rescans on every open). `opc new` arrives with the skeleton.
+- The hub itself is registered in `projects.json`, so the console covers it.

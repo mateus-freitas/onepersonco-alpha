@@ -1,7 +1,7 @@
 # One Person Company — alpha
 
 Internal control room for my projects: the shared agent/engineering standards,
-the project registry, the cross-harness agent skills, and the local board that
+the project registry, the cross-harness agent skills, and the local console that
 shows what every project is doing.
 
 Status: scrappy, internal, testing. If this grows into a product, the polished
@@ -12,10 +12,10 @@ version gets the `onepersonco` name — this checkout keeps `-alpha`.
 | path | what |
 | --- | --- |
 | `standards/` | the rule fragments synced into each repo's `AGENTS.md` (git/PR etiquette, docs discipline, backlog format, orchestration, agent-model selection, platform overlays) |
-| `projects.json` | the project registry — adding a project here is all it takes for the board (and `opc sync`) to see it |
+| `projects.json` | the project registry — adding a project here is all it takes for the console (and `opc sync`) to see it |
 | `skills/` | cross-harness agent skills (`opc-delegate`, `opc-task-loop`), installed machine-wide via the skills CLI |
-| `board/` | the local visual board: scan → index → localhost UI |
-| `scripts/` | the `opc` CLI: `sync` · `check` · `scan` · `board` (`new` comes with the skeleton) |
+| `console/` | the local visual console: scan → index → localhost UI |
+| `scripts/` | the `opc` CLI: `sync` · `check` · `scan` · `console` (`new` comes with the skeleton) |
 | `skeleton/` | template for new projects, extracted from blocos + gymbloc (pending) |
 
 Machine-local working data — scratch, worktrees, trash — lives *outside* every
@@ -82,7 +82,7 @@ projects that have adopted the standards — the ones `opc sync` writes to.
 ```sh
 opc check         # expect 0 errors; info = pending retrofits, not problems
 opc sync          # expect "up to date" for standardized projects
-opc board         # http://localhost:4770 — reload rescans; click paths to open files
+opc console       # http://localhost:4770 — reload rescans; click paths to open files
 ```
 
 ### 7 · Install the agent skills (machine-wide)
@@ -101,15 +101,15 @@ After editing a skill in this repo: `npx skills update`.
 Standardized projects carry managed blocks in `AGENTS.md` (plus a one-line
 `CLAUDE.md` pointer) that `opc sync` writes; never edit them by hand. A project
 that has not adopted the standards yet shows as "pending retrofit" in
-`opc check` and on the board — the retrofit is a guided task (see
+`opc check` and in the console — the retrofit is a guided task (see
 `docs/backlog.md`).
 
 ## Daily use
 
 - `opc check [--dir <checkout>]` — deterministic health: drift, markers, backlog lines, links; audits the checkout you run it from (worktree included); the hub's main checkout still audits every project; `--dir` overrides
-- `opc board` — the board; rescans on every load
+- `opc console` — the console; rescans on every load
 - `opc sync [project…] [--dir <checkout>]` — push standards changes into standardized projects; targets the checkout you run it from (worktree included); the hub's main checkout still syncs all standardized projects; `--dir` overrides
-- `opc scan --snapshot` — refresh the self-contained `board/snapshot.html`
+- `opc scan --snapshot` — refresh the self-contained `console/snapshot.html`
 
 ## Working on the hub itself
 
@@ -117,7 +117,7 @@ that has not adopted the standards yet shows as "pending retrofit" in
   Change a fragment, run `opc sync onepersonco-alpha`, `opc check`, commit.
   Other projects pick it up at their next sync — the `git-pr` fragment's
   standards-sync carve-out explains how those commits travel.
-- **The board** is `board/app.html` + `board/global.css` (the shadcn preset
+- **The console** is `console/app.html` + `console/global.css` (the shadcn preset
   theme; dark by default; every color is a token). No build step, no deps.
 - **The CLI** is `scripts/opc.mjs` — plain Node, stdlib only. Keep it
   dependency-free; `node --check` + `opc check` before committing.

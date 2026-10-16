@@ -1,6 +1,6 @@
 # Backlog
 
-The hub's work queue. One line per task; the board derives status, project and
+The hub's work queue. One line per task; the console derives status, project and
 links from position and text. Sections: Now · Next · Later · Done (recent).
 Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 

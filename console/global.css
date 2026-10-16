@@ -93,7 +93,7 @@ code, pre, kbd, .mono, .sub {
 ::selection { background: var(--secondary); color: var(--secondary-foreground); }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 
-/* OPC project palette — identity colors for the board (the preset itself is grayscale) */
+/* OPC project palette — identity colors for the console (the preset itself is grayscale) */
 :root {
   --project-1: oklch(0.60 0.16 262);
   --project-2: oklch(0.68 0.15 75);
