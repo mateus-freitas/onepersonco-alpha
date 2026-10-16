@@ -479,6 +479,7 @@ function cmdBoard(args) {
       const roots = [
         HUB,
         expand(registry.scratchRoot),
+        path.join(os.homedir(), ".t3", "worktrees"),
         path.join(os.homedir(), "dev", "agents-worktrees"),
         ...registry.projects.map((p) => expand(p.path)),
       ];

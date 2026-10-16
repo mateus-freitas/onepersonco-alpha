@@ -15,6 +15,7 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 ## Later
 
 - [ ] P4 · Worktree awareness + write-back (drag to restatus edits the backlog line)
+- [ ] Lifetime · Fold legacy worktrees (`~/dev/agents-worktrees/`, `~/dev/*-wt-*`) into the worktrees root as they finish
 - [ ] P5 · Skeleton extraction + `opc new` for future projects
 
 ## Done (recent)
@@ -30,3 +31,4 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 - [x] Setup · Private GitHub remote + first push (`mateus-freitas/onepersonco-alpha`) — 2026-10-16
 - [x] P1 · Orchestration rules in the standards (`core/orchestration`), synced into AGENTS.md — 2026-10-16
 - [x] Standards · Branch naming: intent-first (`feat/`, `fix/`, …); author prefix optional + truthful (`codex/` only when Codex authors it) — 2026-10-16
+- [x] Standards · Worktrees root: OPC-managed checkouts live in `~/dev/.onepersonco/worktrees/<project>/<slug>/`; T3's own folder accepted — 2026-10-16

@@ -26,7 +26,9 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   branch — `claude/…`, `opencode/…`, `codex/…`, `deepseek/…`, e.g.
   `opencode/feat/gymbloc-retrofit`. The prefix is optional and must be truthful;
   the old default of every branch carrying `codex/` regardless of the author is
-  retired.
+  retired. Workspace tools that auto-name branches (e.g. `t3/…`) are fine while
+  a run is exploratory; rename to the convention once it becomes a real
+  objective.
 - Never push to `main`, force-push, or rewrite shared history as routine cleanup.
 - Preserve unrelated changes in a dirty worktree; stage explicit paths or hunks
   and check the staged diff before committing.

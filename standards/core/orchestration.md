@@ -17,6 +17,11 @@
   ownership — never two workers on one file.
 - Workers never commit, push, or merge. They leave the tree dirty and record
   decisions, evidence, and open questions in the task folder's `NOTES.md`.
+- Isolated worktrees live under the worktrees root registered in
+  `projects.json` (`~/dev/.onepersonco/worktrees/<project>/<slug>/`). Create
+  them there and bind the thread to the path; app-managed checkouts (T3's
+  `~/.t3/worktrees/`) are acceptable. Legacy `~/dev/agents-worktrees/` and
+  `~/dev/*-wt-*` checkouts are grandfathered, not a pattern.
 - The orchestrator reviews every diff, re-runs the verification itself, and only
   then commits. "The worker said it passes" is not verification.
 - Prefer async delegation over polling: end the turn and let completion wake the

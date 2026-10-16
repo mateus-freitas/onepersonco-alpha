@@ -1,6 +1,7 @@
 {
   "org": "One Person Company (alpha)",
   "scratchRoot": "~/dev/.onepersonco",
+  "worktreesRoot": "~/dev/.onepersonco/worktrees",
   "projects": [
     {
       "id": "blocos",

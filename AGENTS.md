@@ -46,7 +46,9 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   branch — `claude/…`, `opencode/…`, `codex/…`, `deepseek/…`, e.g.
   `opencode/feat/gymbloc-retrofit`. The prefix is optional and must be truthful;
   the old default of every branch carrying `codex/` regardless of the author is
-  retired.
+  retired. Workspace tools that auto-name branches (e.g. `t3/…`) are fine while
+  a run is exploratory; rename to the convention once it becomes a real
+  objective.
 - Never push to `main`, force-push, or rewrite shared history as routine cleanup.
 - Preserve unrelated changes in a dirty worktree; stage explicit paths or hunks
   and check the staged diff before committing.
@@ -183,6 +185,11 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   ownership — never two workers on one file.
 - Workers never commit, push, or merge. They leave the tree dirty and record
   decisions, evidence, and open questions in the task folder's `NOTES.md`.
+- Isolated worktrees live under the worktrees root registered in
+  `projects.json` (`~/dev/.onepersonco/worktrees/<project>/<slug>/`). Create
+  them there and bind the thread to the path; app-managed checkouts (T3's
+  `~/.t3/worktrees/`) are acceptable. Legacy `~/dev/agents-worktrees/` and
+  `~/dev/*-wt-*` checkouts are grandfathered, not a pattern.
 - The orchestrator reviews every diff, re-runs the verification itself, and only
   then commits. "The worker said it passes" is not verification.
 - Prefer async delegation over polling: end the turn and let completion wake the
