@@ -6,7 +6,7 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 
 ## Now
 
-- [ ] Retrofit gymbloc — managed blocks, `docs/internals/`, `backlog.md` seed, prompts → scratch, `swift-ios` overlay
+- [ ] P4 · Worktree awareness for `opc sync`/`check` — target the active worktree, not the registry's main checkout (a live sync wrote into gymbloc's main during the retrofit; reverted by hand)
 
 ## Next
 
@@ -14,8 +14,6 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 
 ## Later
 
-- [ ] P4 · Worktree awareness for `opc sync`/`check` — target the active worktree, not the registry's main checkout (a live sync wrote into gymbloc's main during the retrofit; reverted by hand)
-- [ ] P4 · First OPC skill — `opc-task-loop` (end-of-task loop + docs-placement decisions) authored in the hub (`skills/<name>/SKILL.md`), distributed machine-wide via `npx skills add mateus-freitas/onepersonco-alpha` (`~/.agents` store + harness symlinks); later: `opc skills` wrapper + lock-vs-hub drift check; verify Codex sees it, else AGENTS pointer
 - [ ] P4 · Board write-back (drag to restatus edits the backlog line)
 - [ ] Lifetime · Fold legacy worktrees (`~/dev/agents-worktrees/`, `~/dev/*-wt-*`) into the worktrees root as they finish
 - [ ] P5 · Skeleton extraction + `opc new` for future projects
@@ -35,3 +33,6 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 - [x] Standards · Branch naming: intent-first (`feat/`, `fix/`, …); author prefix optional + truthful (`codex/` only when Codex authors it) — 2026-10-16
 - [x] Standards · Worktrees root: OPC-managed checkouts live in `~/dev/.onepersonco/worktrees/<project>/<slug>/`; T3's own folder accepted — 2026-10-16
 - [x] Standards · Plans are scratch-only going forward — no new repo `plans/` files; durable outcomes graduate into `internals/` or an RFC/ADR — 2026-10-16
+- [x] Retrofit gymbloc — #38 merged; standards-sync micro-PRs #39 + #40 (first uses of the carve-out) — 2026-10-16
+- [x] Standards · Standards-sync commit carve-out — micro-PR (review-exempt) or direct where permitted; `opc check` green is the evidence — 2026-10-16
+- [x] Skills v1 — `opc-delegate` + `opc-task-loop` authored in `skills/`, installed machine-wide via the skills CLI — 2026-10-16
