@@ -22,3 +22,4 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 ## Done (recent)
 
 - [x] P0 · Create the hub + scratch layout; register blocos and gymbloc — 2026-10-16
+- [x] P1 · `opc sync` v0 — the hub composes its own AGENTS.md and generated files from the fragments — 2026-10-16
