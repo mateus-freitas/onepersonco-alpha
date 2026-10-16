@@ -22,6 +22,70 @@ const boardDir = path.join(HUB, "board");
 const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
 const SECTIONS = ["Now", "Next", "Later", "Done"];
 
+// ---------------------------------------------------------------- target
+
+// A checkout of a registered project = any git worktree that shares its repo's
+// --git-common-dir with the registered path (symlinks resolved). Sync/check
+// target the checkout you run them from; only the hub's own main checkout keeps
+// the control-room behavior (all registered mains). --dir and project names
+// override the CWD.
+
+const real = (p) => {
+  try { return fs.realpathSync(p); } catch { return path.resolve(p); }
+};
+
+function branchOf(dir) {
+  const head = git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (!head) return "?";
+  return head === "HEAD" ? `detached ${git(dir, ["rev-parse", "--short", "HEAD"]) || "?"}` : head;
+}
+
+// the hub repo's main checkout, whoever is running and wherever from
+function hubMainRoot() {
+  const common = git(HUB, ["rev-parse", "--git-common-dir"]);
+  return common === null ? real(HUB) : path.dirname(real(path.resolve(HUB, common)));
+}
+
+function detectCheckout(dir) {
+  const top = git(dir, ["rev-parse", "--show-toplevel"]);
+  if (top === null) return null; // not a work tree (e.g. inside a git admin dir)
+  const common = git(dir, ["rev-parse", "--git-common-dir"]);
+  for (const project of registry.projects) {
+    const main = expand(project.path);
+    const mainCommon = git(main, ["rev-parse", "--git-common-dir"]);
+    const hit = common !== null && mainCommon !== null
+      ? real(path.resolve(dir, common)) === real(path.resolve(main, mainCommon))
+      : real(top) === real(main);
+    if (hit) return { project, dir: top, branch: branchOf(top) };
+  }
+  return null;
+}
+
+function parseDirArg(args) {
+  const eq = args.find((a) => a.startsWith("--dir="));
+  if (eq !== undefined) throw new Error(`unsupported "${eq}" — use --dir <checkout>`);
+  const i = args.indexOf("--dir");
+  if (i === -1) return { dir: null, rest: args };
+  const value = args[i + 1];
+  if (value === undefined || value.startsWith("-") || args.indexOf("--dir", i + 1) !== -1)
+    throw new Error("--dir requires a checkout path");
+  return { dir: value, rest: args.filter((_, j) => j !== i && j !== i + 1) };
+}
+
+function resolveDirTarget(raw) {
+  const dir = expand(raw);
+  if (!fs.existsSync(dir)) throw new Error(`--dir ${dir}: path does not exist`);
+  const checkout = detectCheckout(dir);
+  if (!checkout) throw new Error(`--dir ${dir}: not a git checkout of a registered project`);
+  return checkout;
+}
+
+// the checkout containing the CWD; null = control-room mode (hub main or outside)
+function cwdCheckout() {
+  const checkout = detectCheckout(process.cwd());
+  return checkout && real(checkout.dir) !== hubMainRoot() ? checkout : null;
+}
+
 // ---------------------------------------------------------------- sync
 
 function readFragments(dir, label) {
@@ -112,28 +176,54 @@ function syncFile(projectDir, rel, body, fragmentFile) {
   return true;
 }
 
+function syncCheckout(project, dir, branch) {
+  if (!project.standardized) {
+    console.log(`${project.id} @ ${dir} (${branch}): pending retrofit (skipped)`);
+    return 0;
+  }
+  if (!fs.existsSync(dir)) throw new Error(`${project.id}: path does not exist: ${dir}`);
+  const fragments = loadProjectFragments(project);
+  const updated = [];
+  const missing = [];
+  for (const f of fragments) {
+    const result = f.kind === "block" ? syncBlock(dir, f.target, f.body) : syncFile(dir, f.target, f.body, f.file);
+    if (result === true) updated.push(`${f.kind} ${f.target}`);
+    if (result === "missing") missing.push(f.target);
+  }
+  const note = missing.length ? ` — MISSING markers: ${missing.join(", ")}` : "";
+  console.log(`${project.id} @ ${dir} (${branch}): ${updated.length ? "updated " + updated.join("; ") : "up to date"}${note}`);
+  return updated.length;
+}
+
 function cmdSync(args = []) {
-  const only = args.filter((a) => !a.startsWith("-"));
+  const { dir: dirArg, rest } = parseDirArg(args);
+  const only = rest.filter((a) => !a.startsWith("-"));
+  const known = registry.projects.map((p) => p.id);
+  const unknown = only.find((id) => !known.includes(id));
+  if (unknown) throw new Error(`unknown project: ${unknown} (known: ${known.join(", ")})`);
+
   let changes = 0;
-  for (const project of registry.projects) {
-    if (only.length && !only.includes(project.id)) continue;
-    if (!project.standardized) {
-      console.log(`${project.id}: pending retrofit (skipped)`);
-      continue;
+  if (dirArg) {
+    const checkout = resolveDirTarget(dirArg);
+    if (only.length && !only.includes(checkout.project.id))
+      throw new Error(`--dir targets ${checkout.project.id}; named project(s): ${only.join(", ")}`);
+    changes += syncCheckout(checkout.project, checkout.dir, checkout.branch);
+  } else if (only.length) {
+    for (const project of registry.projects) {
+      if (!only.includes(project.id)) continue;
+      const dir = expand(project.path);
+      changes += syncCheckout(project, dir, branchOf(dir));
     }
-    const dir = expand(project.path);
-    if (!fs.existsSync(dir)) throw new Error(`${project.id}: path does not exist: ${dir}`);
-    const fragments = loadProjectFragments(project);
-    const updated = [];
-    const missing = [];
-    for (const f of fragments) {
-      const result = f.kind === "block" ? syncBlock(dir, f.target, f.body) : syncFile(dir, f.target, f.body, f.file);
-      if (result === true) updated.push(`${f.kind} ${f.target}`);
-      if (result === "missing") missing.push(f.target);
+  } else {
+    const checkout = cwdCheckout();
+    if (checkout) {
+      changes += syncCheckout(checkout.project, checkout.dir, checkout.branch);
+    } else {
+      for (const project of registry.projects) {
+        const dir = expand(project.path);
+        changes += syncCheckout(project, dir, branchOf(dir));
+      }
     }
-    changes += updated.length;
-    const note = missing.length ? ` — MISSING markers: ${missing.join(", ")}` : "";
-    console.log(`${project.id}: ${updated.length ? "updated " + updated.join("; ") : "up to date"}${note}`);
   }
   console.log(changes ? `sync done — ${changes} update(s)` : "sync done — everything up to date");
 }
@@ -374,14 +464,13 @@ function checkBacklog(p, dir, add) {
   }
 }
 
-function checkProject(p, fragments) {
+function checkProject(p, fragments, dir = expand(p.path)) {
   const findings = [];
   const add = (level, code, message, file) => {
     const finding = { project: p.id, level, code, message };
     if (file) finding.file = file;
     findings.push(finding);
   };
-  const dir = expand(p.path);
   if (!fs.existsSync(dir)) {
     add("error", "path.missing", `registered path does not exist: ${dir}`);
     return findings;
@@ -455,25 +544,44 @@ function checkAll() {
 }
 
 function cmdCheck(args) {
-  const { health, perProject } = checkAll();
-  if (args.includes("--json")) {
-    console.log(JSON.stringify(health));
+  const { dir: dirArg, rest } = parseDirArg(args);
+  const json = rest.includes("--json");
+  const target = dirArg ? resolveDirTarget(dirArg) : cwdCheckout();
+  const checkedAt = new Date().toISOString();
+
+  let health;
+  const rows = [];
+  if (target) {
+    const findings = checkProject(target.project, loadProjectFragments(target.project), target.dir);
+    health = healthOf(findings, checkedAt);
+    rows.push({ project: target.project, dir: target.dir, branch: target.branch, findings });
   } else {
+    const all = checkAll();
+    health = all.health;
     for (const p of registry.projects) {
-      const findings = perProject.get(p.id).findings;
-      const n = (level) => findings.filter((f) => f.level === level).length;
-      const counts = [];
-      if (n("error")) counts.push(countText(n("error"), "error"));
-      if (n("warning")) counts.push(countText(n("warning"), "warning"));
-      if (n("info")) counts.push(`${n("info")} info`);
-      console.log(`${p.id} ${n("error") ? "✖" : "✔"} ${counts.length ? counts.join(", ") : "clean"}`);
-      for (const f of findings) {
-        const glyph = f.level === "error" ? "✖" : f.level === "warning" ? "!" : "·";
-        console.log(`  ${glyph} [${f.code}] ${f.message}${f.file ? ` (${f.file})` : ""}`);
-      }
+      const dir = expand(p.path);
+      rows.push({ project: p, dir, branch: branchOf(dir), findings: all.perProject.get(p.id).findings });
     }
-    console.log(`opc check — ${healthCounts(health)}`);
   }
+
+  if (json) {
+    console.log(JSON.stringify({ target: target ? { id: target.project.id, dir: target.dir, branch: target.branch } : null, ...health }));
+    process.exitCode = health.errors > 0 ? 1 : 0;
+    return;
+  }
+  for (const row of rows) {
+    const n = (level) => row.findings.filter((f) => f.level === level).length;
+    const counts = [];
+    if (n("error")) counts.push(countText(n("error"), "error"));
+    if (n("warning")) counts.push(countText(n("warning"), "warning"));
+    if (n("info")) counts.push(`${n("info")} info`);
+    console.log(`${row.project.id} @ ${row.dir} (${row.branch}) ${n("error") ? "✖" : "✔"} ${counts.length ? counts.join(", ") : "clean"}`);
+    for (const f of row.findings) {
+      const glyph = f.level === "error" ? "✖" : f.level === "warning" ? "!" : "·";
+      console.log(`  ${glyph} [${f.code}] ${f.message}${f.file ? ` (${f.file})` : ""}`);
+    }
+  }
+  console.log(`opc check — ${healthCounts(health)}`);
   process.exitCode = health.errors > 0 ? 1 : 0;
 }
 
@@ -558,7 +666,7 @@ function main() {
   if (cmd === "check") return cmdCheck(args);
   if (cmd === "scan") return cmdScan(args);
   if (cmd === "board") return cmdBoard(args);
-  console.log("usage:\n  opc sync [project…]     compose standards into standardized projects (all, or named ones)\n  opc check [--json]      deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write board/data.json (and a self-contained snapshot.html)\n  opc board [--port N]    serve the board at http://localhost:N");
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write board/data.json (and a self-contained snapshot.html)\n  opc board [--port N]    serve the board at http://localhost:N\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 
