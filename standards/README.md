@@ -20,6 +20,7 @@ Marker convention (first line of every fragment):
 | `core/backlog.md` | block `backlog` | the one-line task format and section names |
 | `core/review-gates.md` | block `review-gates` | when the independent review is required; the shared contract |
 | `core/agent-selection.md` | file `docs/development/agent-model-selection.md` | model/effort selection (replaces the two diverged copies) |
+| `core/orchestration.md` | block `orchestration` | orchestrator/worker workflow: briefs in scratch, disjoint ownership, workers never commit, verification duties |
 
 ## Pending
 
