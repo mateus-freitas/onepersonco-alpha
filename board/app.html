@@ -32,6 +32,7 @@
   .tab:hover{color:var(--foreground)}
   .tab.on{background:var(--background);color:var(--foreground);font-weight:500;box-shadow:0 1px 2px rgb(0 0 0 / .06)}
   .tab .n{font-size:10px;margin-left:5px;opacity:.7}
+  .n.danger{color:var(--destructive)}
   .banner{border:1px dashed var(--border);border-radius:var(--radius);padding:10px 14px;color:var(--muted-foreground);font-size:12px}
   .banner b{color:var(--foreground)}
   .cols{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
@@ -104,9 +105,13 @@ function renderChips() {
 function renderTabs() {
   const rfcCount = allDocs().filter((d) => ["rfc", "adr"].includes(d.type)).length;
   const tabs = [["board", "Board"], ["rfcs", "RFCs", rfcCount], ["docs", "Docs", allDocs().length], ["prompts", "Prompts", allSessions().length]];
-  $("#tabs").innerHTML = tabs.map(([id, label, n]) =>
+  if (DATA.health) {
+    const errors = DATA.health.errors || 0;
+    tabs.push(["health", "Health", errors + (DATA.health.warnings || 0), errors > 0 ? " danger" : ""]);
+  }
+  $("#tabs").innerHTML = tabs.map(([id, label, n, cls]) =>
     '<button class="tab' + (state.tab === id ? " on" : "") + '" data-tab="' + id + '">' + label +
-    (n ? '<span class="n">' + n + "</span>" : "") + "</button>").join("");
+    (n ? '<span class="n' + (cls || "") + '">' + esc(n) + "</span>" : "") + "</button>").join("");
 }
 
 function renderBoard() {
@@ -115,6 +120,10 @@ function renderBoard() {
     ? '<div class="banner">' + pending.map((p) => "<b>" + esc(p.id) + "</b>" + (p.exists
       ? ' — registered, waiting for its retrofit (no <span class="mono">docs/backlog.md</span> yet)'
       : " — path missing")).join("<br>") + "</div>"
+    : "";
+  const h = DATA.health;
+  const healthBanner = h && h.errors > 0
+    ? '<div class="banner">opc check reports <b>' + esc(h.errors) + (Number(h.errors) === 1 ? " error" : " errors") + "</b> — open the Health tab</div>"
     : "";
   const cols = ["Now", "Next", "Later", "Done"].map((s) => {
     const items = filtered().flatMap((p) => backlogOf(p)[s].map((i) => ({ ...i, project: p.id })));
@@ -129,7 +138,7 @@ function renderBoard() {
     }).join("") : '<div class="empty">—</div>';
     return '<div class="col"><div class="hd">' + s + " <em>" + items.length + "</em></div>" + cards + "</div>";
   }).join("");
-  return banner + '<div class="cols">' + cols + "</div>";
+  return healthBanner + banner + '<div class="cols">' + cols + "</div>";
 }
 
 function renderRfcs() {
@@ -166,6 +175,22 @@ function renderPrompts() {
   return groups || '<div class="empty">No active prompt sessions in scratch.</div>';
 }
 
+function renderHealth() {
+  const findings = (DATA.health && DATA.health.findings) || [];
+  if (!findings.length) return '<div class="empty">checks clean</div>';
+  const groups = filtered().map((p) => {
+    const items = findings.filter((f) => f.project === p.id);
+    if (!items.length) return "";
+    const cards = items.map((f) => {
+      const file = f.file ? '<div class="meta"><span class="mono">' + esc(f.file) + "</span></div>" : "";
+      return '<div class="card"><div class="t"><span class="' + (f.level === "error" ? "tag danger" : "tag") + '">' + esc(f.level) +
+        '</span> <span class="mono">' + esc(f.code) + "</span> " + esc(f.message) + "</div>" + file + "</div>";
+    }).join("");
+    return '<div><div class="group-hd"><span class="dot ' + pclass(p.id) + '"></span>' + esc(p.id) + '</div><div class="list">' + cards + "</div></div>";
+  }).join("");
+  return groups || '<div class="empty">no findings for the selected projects</div>';
+}
+
 function renderFoot() {
   $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc board` for the live board · " : "live · data rescans on every load · ") +
     filtered().map((p) => p.id + (p.branch ? "@" + p.branch : "") + (p.dirty ? " ✎" + p.dirty : "")).join("  ·  ");
@@ -174,9 +199,11 @@ function renderFoot() {
 function render() {
   if (!DATA) return;
   $("#gen").textContent = "generated " + new Date(DATA.generatedAt).toLocaleString();
+  if (state.tab === "health" && !DATA.health) state.tab = "board";
   renderChips();
   renderTabs();
   const views = { board: renderBoard, rfcs: renderRfcs, docs: renderDocs, prompts: renderPrompts };
+  if (DATA.health) views.health = renderHealth;
   $("#view").innerHTML = views[state.tab]();
   renderFoot();
   document.getElementById("rescan").style.display = window.__DATA__ ? "none" : "";
