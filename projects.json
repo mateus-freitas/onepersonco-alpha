@@ -1,0 +1,20 @@
+{
+  "org": "One Person Company (alpha)",
+  "scratchRoot": "~/dev/.onepersonco",
+  "projects": [
+    {
+      "id": "blocos",
+      "name": "Blocos",
+      "path": "~/dev/blocos",
+      "stack": ["flutter", "dart", "ts-firebase"],
+      "docs": "docs"
+    },
+    {
+      "id": "gymbloc",
+      "name": "Gymbloc",
+      "path": "~/dev/gymbloc",
+      "stack": ["swift", "ios"],
+      "docs": "docs"
+    }
+  ]
+}
