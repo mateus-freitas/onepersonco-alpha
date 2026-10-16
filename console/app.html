@@ -48,6 +48,8 @@
   .tag{font-size:9.5px;border:1px solid var(--border);border-radius:var(--radius);padding:1px 6px;color:var(--muted-foreground)}
   .tag.solid{background:var(--secondary);border-color:transparent;color:var(--secondary-foreground)}
   .tag.danger{color:var(--destructive);border-color:color-mix(in srgb, var(--destructive) 45%, transparent)}
+  .tag.muted{opacity:.6}
+  .wt-path{display:inline-block;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
   .oplink{color:inherit;text-decoration:none;border-bottom:1px dotted transparent;cursor:pointer}
   .oplink:hover{border-bottom-color:var(--border)}
   #toast{position:fixed;right:16px;bottom:16px;background:var(--card);border:1px solid var(--border);color:var(--foreground);font-size:12px;padding:8px 12px;border-radius:var(--radius);opacity:0;transition:opacity .15s;pointer-events:none}
@@ -113,6 +115,8 @@ const docsOf = (p) => p.docs || [];
 const allDocs = () => filtered().flatMap((p) => docsOf(p).map((d) => ({ ...d, project: p.id, projectPath: p.path })));
 const sessionsOf = (p) => p.promptSessions || [];
 const allSessions = () => filtered().flatMap((p) => sessionsOf(p).map((s) => ({ ...s, project: p.id })));
+const worktreesOf = (p) => p.worktrees || [];
+const worktreeCount = () => filtered().reduce((n, p) => n + worktreesOf(p).length, 0);
 
 function chip(id, name, extra) {
   return '<span class="chip' + (state.project === id ? " on" : "") + '" data-project="' + id + '">' +
@@ -127,7 +131,7 @@ function renderChips() {
 
 function renderTabs() {
   const rfcCount = allDocs().filter((d) => ["rfc", "adr"].includes(d.type)).length;
-  const tabs = [["board", "Board"], ["rfcs", "RFCs", rfcCount], ["docs", "Docs", allDocs().length], ["prompts", "Prompts", allSessions().length]];
+  const tabs = [["board", "Board"], ["worktrees", "Worktrees", worktreeCount()], ["rfcs", "RFCs", rfcCount], ["docs", "Docs", allDocs().length], ["prompts", "Prompts", allSessions().length]];
   if (DATA.health) {
     const errors = DATA.health.errors || 0;
     tabs.push(["health", "Health", errors + (DATA.health.warnings || 0), errors > 0 ? " danger" : ""]);
@@ -215,6 +219,44 @@ function renderHealth() {
   return groups || '<div class="empty">no findings for the selected projects</div>';
 }
 
+function renderWorktrees() {
+  const banner = DATA.gh === false ? '<div class="banner">gh unavailable — PR states hidden</div>' : "";
+  const home = (DATA.home || "").replace(/\/+$/, "");
+  const groups = filtered().map((p) => {
+    const wts = worktreesOf(p);
+    const hd = '<div class="group-hd"><span class="dot ' + pclass(p.id) + '"></span>' + esc(p.id) + (wts.length ? " <em>" + wts.length + "</em>" : "") + "</div>";
+    if (!wts.length) return "<div>" + hd + '<div class="empty">no linked worktrees</div></div>';
+    const rows = wts.map((w) => {
+      const state = [];
+      if (w.dirty > 0) state.push('<span title="' + esc(w.dirty + " uncommitted change(s)") + '">✎ ' + esc(w.dirty) + "</span>");
+      const ahead = w.ahead || 0, behind = w.behind || 0;
+      if (ahead > 0 || behind > 0) {
+        const ab = [ahead > 0 ? "↑" + ahead : "", behind > 0 ? "↓" + behind : ""].filter(Boolean).join(" ");
+        state.push('<span title="' + esc(ahead + " ahead / " + behind + " behind local main") + '">' + ab + "</span>");
+      }
+      if (w.stale) state.push('<span class="tag danger">stale</span>');
+      if (w.pr && w.pr.state === "MERGED" && w.dirty === 0) state.push('<span class="tag solid">safe to remove</span>');
+      let pr = "—";
+      if (w.pr) {
+        const cls = w.pr.state === "MERGED" ? "tag solid" : w.pr.state === "CLOSED" ? "tag danger" : w.pr.isDraft ? "tag muted" : "tag";
+        pr = '<a class="' + cls + '" href="' + esc(w.pr.url) + '" target="_blank" rel="noopener" title="' + esc(w.pr.title || "") + '">#' + esc(w.pr.number) + " " + esc(String(w.pr.state || "").toLowerCase()) + "</a>";
+      }
+      const short = home && w.path && w.path.startsWith(home) ? "~" + w.path.slice(home.length) : w.path;
+      const last = w.lastCommit ? '<span title="' + esc(w.lastCommit) + '">' + esc(w.lastCommit.slice(0, 10)) + "</span>" : "—";
+      return "<tr>" +
+        "<td class='mono'>" + esc(w.branch || "") + "</td>" +
+        "<td>" + (w.root && w.root !== "opc" ? '<span class="tag">' + esc(w.root) + "</span>" : "") + "</td>" +
+        "<td>" + state.join(" ") + "</td>" +
+        "<td>" + pr + "</td>" +
+        "<td class='mono'>" + last + "</td>" +
+        "<td class='mono'><span class='wt-path'>" + opLink(short, w.path, "Open " + w.path) + "</span></td>" +
+        "</tr>";
+    }).join("");
+    return "<div>" + hd + "<table><thead><tr><th>branch</th><th>root</th><th>state</th><th>pr</th><th>last commit</th><th>path</th></tr></thead><tbody>" + rows + "</tbody></table></div>";
+  }).join("");
+  return banner + (groups || '<div class="empty">No registered projects.</div>');
+}
+
 function renderFoot() {
   $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc console` for the live console · " : "live · data rescans on every load · click paths to open locally · ") +
     filtered().map((p) => p.id + (p.branch ? "@" + p.branch : "") + (p.dirty ? " ✎" + p.dirty : "")).join("  ·  ");
@@ -226,7 +268,7 @@ function render() {
   if (state.tab === "health" && !DATA.health) state.tab = "board";
   renderChips();
   renderTabs();
-  const views = { board: renderBoard, rfcs: renderRfcs, docs: renderDocs, prompts: renderPrompts };
+  const views = { board: renderBoard, worktrees: renderWorktrees, rfcs: renderRfcs, docs: renderDocs, prompts: renderPrompts };
   if (DATA.health) views.health = renderHealth;
   $("#view").innerHTML = views[state.tab]();
   renderFoot();

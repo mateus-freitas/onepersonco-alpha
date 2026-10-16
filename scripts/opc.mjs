@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const HUB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -235,6 +235,204 @@ function git(dir, args) {
   return r.status === 0 ? r.stdout.replace(/\n$/, "") : null;
 }
 
+// ---------------------------------------------------------------- worktrees
+
+// Linked worktrees — every `git worktree list` entry of a registered project's
+// repo except its own main checkout. Answers "what is in flight, what can be
+// cleaned up?" without ever throwing: a failed git/gh call yields []/null for
+// its scope only.
+
+const WORKTREE_ROOTS = [
+  { root: "opc", base: () => expand(registry.worktreesRoot || "~/dev/.onepersonco/worktrees") },
+  { root: "t3", base: () => path.join(os.homedir(), ".t3", "worktrees") },
+  { root: "legacy", base: () => path.join(os.homedir(), "dev", "agents-worktrees") },
+];
+
+function worktreeRoot(dir) {
+  const abs = real(dir);
+  for (const { root, base } of WORKTREE_ROOTS) {
+    const base2 = real(base());
+    if (abs === base2 || abs.startsWith(base2 + path.sep)) return root;
+  }
+  return "other";
+}
+
+function parseWorktreeList(out) {
+  const entries = [];
+  let entry = null;
+  const flush = () => {
+    if (entry && entry.path) entries.push(entry);
+    entry = null;
+  };
+  // `git worktree list --porcelain -z`: NUL-terminated fields (paths stay literal,
+  // a path may contain a newline), entries separated by an extra NUL.
+  for (const field of out.split("\0")) {
+    if (!field) continue;
+    const sp = field.indexOf(" ");
+    const key = sp === -1 ? field : field.slice(0, sp);
+    const value = sp === -1 ? "" : field.slice(sp + 1);
+    if (key === "worktree") {
+      flush();
+      entry = { path: value, head: null, branch: null, detached: false, prunable: false };
+      continue;
+    }
+    if (!entry) continue;
+    if (key === "HEAD") entry.head = value;
+    else if (key === "branch") entry.branch = value.replace(/^refs\/heads\//, "");
+    else if (key === "detached") entry.detached = true;
+    else if (key === "prunable") entry.prunable = true;
+  }
+  flush();
+  for (const e of entries) if (!e.branch) e.detached = true; // no branch line = detached HEAD
+  return entries;
+}
+
+// One call per repo: head / lastCommit (date + subject) / ahead-behind vs local
+// main for every branch at once. `%(ahead-behind:main)` is fatal on a repo
+// without `main`, so that call is retried without the field (nulls then).
+function branchIndex(main) {
+  const fields = "%(refname:short)%09%(objectname:short)%09%(committerdate:short)%09";
+  const index = new Map();
+  let out = git(main, ["for-each-ref", "refs/heads", `--format=${fields}%(ahead-behind:main)%09%(subject)`]);
+  let track = out !== null;
+  if (out === null) out = git(main, ["for-each-ref", "refs/heads", `--format=${fields}%(subject)`]);
+  if (out === null) return index;
+  for (const line of out.split("\n")) {
+    if (!line) continue;
+    const parts = line.split("\t");
+    if (parts.length < 4) continue;
+    const [name, sha, date] = parts;
+    const subject = (track ? parts.slice(4) : parts.slice(3)).join("\t");
+    let ahead = null;
+    let behind = null;
+    if (track) {
+      const m = parts[3].match(/^(\d+)\s+(\d+)$/);
+      if (m) { ahead = Number(m[1]); behind = Number(m[2]); }
+    }
+    index.set(name, { sha, lastCommit: date ? `${date} ${subject}`.trim() : null, ahead, behind });
+  }
+  return index;
+}
+
+function githubSlug(main) {
+  const url = git(main, ["remote", "get-url", "origin"]);
+  if (!url) return null;
+  const m = url.trim().replace(/\/+$/, "").match(/github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+// headRefName -> { number, state, isDraft, url, title }; highest number wins.
+function prIndex(list) {
+  const index = new Map();
+  for (const pr of list) {
+    if (!pr || typeof pr.headRefName !== "string") continue;
+    const number = Number(pr.number);
+    const prev = index.get(pr.headRefName);
+    if (prev && !(number > prev.number)) continue;
+    index.set(pr.headRefName, { number, state: pr.state, isDraft: !!pr.isDraft, url: pr.url, title: pr.title });
+  }
+  return index;
+}
+
+// One batched `gh pr list` per repo, run concurrently; null on any failure.
+function ghPrList(slug) {
+  return new Promise((resolve) => {
+    let out = "";
+    let settled = false;
+    let timer = null;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(value);
+    };
+    const child = spawn(
+      "gh",
+      ["pr", "list", "-R", slug, "--state", "all", "--limit", "100", "--json", "headRefName,number,state,isDraft,url,title"],
+      { stdio: ["ignore", "pipe", "pipe"] });
+    timer = setTimeout(() => { child.kill("SIGKILL"); finish(null); }, 10000);
+    child.stdout.on("data", (chunk) => { out += chunk; });
+    child.stderr.on("data", () => {});
+    child.on("error", () => finish(null));
+    child.on("close", (code) => {
+      if (code !== 0) return finish(null);
+      try {
+        const parsed = JSON.parse(out);
+        finish(Array.isArray(parsed) ? parsed : null);
+      } catch { finish(null); }
+    });
+  });
+}
+
+async function collectWorktrees() {
+  const repos = registry.projects.map((p) => {
+    const main = expand(p.path);
+    const entries = [];
+    if (fs.existsSync(main)) {
+      const mainReal = real(main);
+      const index = branchIndex(main);
+      const listed = parseWorktreeList(git(main, ["worktree", "list", "--porcelain", "-z"]) || "");
+      for (const raw of listed) {
+        if (real(raw.path) === mainReal) continue; // the project's own main checkout
+        const exists = fs.existsSync(raw.path);
+        const ref = raw.detached ? null : index.get(raw.branch);
+        const head = (ref && ref.sha) || (raw.head || "").slice(0, 7) || null;
+        let lastCommit = ref ? ref.lastCommit : null;
+        if (lastCommit === null && raw.head) lastCommit = git(main, ["log", "-1", "--format=%cs %s", raw.head]);
+        // ahead/behind vs local main: branch entries come from branchIndex; a detached
+        // entry falls back to a rev-list against its head (prints main-side first).
+        let ahead = ref ? ref.ahead : null;
+        let behind = ref ? ref.behind : null;
+        if (!ref && raw.detached && raw.head) {
+          const ab = git(main, ["rev-list", "--left-right", "--count", `main...${raw.head}`]);
+          const m = ab && ab.match(/^(\d+)\s+(\d+)$/);
+          if (m) { behind = Number(m[1]); ahead = Number(m[2]); }
+        }
+        const status = exists ? git(raw.path, ["status", "--porcelain"]) : null;
+        entries.push({
+          branch: raw.branch,
+          detached: raw.detached,
+          entry: {
+            path: raw.path,
+            root: worktreeRoot(raw.path),
+            branch: raw.detached ? `detached ${head || "?"}` : raw.branch || "?",
+            head,
+            dirty: status === null ? null : status.split("\n").filter(Boolean).length,
+            ahead,
+            behind,
+            lastCommit,
+            stale: raw.prunable,
+            pr: null,
+          },
+        });
+      }
+    }
+    return { id: p.id, main, entries };
+  });
+
+  // Eligibility: ≥ 1 non-detached linked worktree and a GitHub origin.
+  const lookups = repos
+    .filter((r) => r.entries.some((e) => !e.detached))
+    .map((r) => ({ id: r.id, slug: githubSlug(r.main) }))
+    .filter((l) => l.slug);
+  const results = await Promise.all(lookups.map((l) => ghPrList(l.slug)));
+  // gh = "every PR lookup that was needed succeeded" — a mixed outcome means some
+  // PR states are hidden, so the console shows the note (vacuous when none needed).
+  let gh = lookups.length > 0;
+  lookups.forEach((l, i) => {
+    const prs = results[i];
+    if (!prs) { gh = false; return; }
+    const index = prIndex(prs);
+    const repo = repos.find((r) => r.id === l.id);
+    for (const e of repo.entries) {
+      if (e.detached || !e.branch) continue;
+      e.entry.pr = index.get(e.branch) || null;
+    }
+  });
+
+  return { byId: new Map(repos.map((r) => [r.id, r.entries.map((e) => e.entry)])), gh };
+}
+
 function parseBacklog(file) {
   if (!fs.existsSync(file)) return null;
   const sections = { Now: [], Next: [], Later: [], Done: [] };
@@ -331,6 +529,7 @@ function scanProject(p) {
     docs: [],
     promptSessions: [],
     legacyPromptFiles: 0,
+    worktrees: [],
   };
   if (!exists) return entry;
   entry.backlog = parseBacklog(path.join(docsDir, "backlog.md"));
@@ -348,11 +547,13 @@ function scanProject(p) {
   return entry;
 }
 
-function scanAll() {
+async function scanAll() {
   const { health, perProject } = checkAll();
+  const { byId, gh } = await collectWorktrees();
   const projects = registry.projects.map((p) => {
     const entry = scanProject(p);
     entry.health = perProject.get(p.id);
+    entry.worktrees = byId.get(p.id) || [];
     return entry;
   });
   return {
@@ -360,13 +561,14 @@ function scanAll() {
     org: registry.org,
     scratchRoot: registry.scratchRoot,
     home: os.homedir(),
+    gh,
     health,
     projects,
   };
 }
 
-function cmdScan(args) {
-  const data = scanAll();
+async function cmdScan(args) {
+  const data = await scanAll();
   fs.mkdirSync(consoleDir, { recursive: true });
   const json = JSON.stringify(data, null, 2);
   fs.writeFileSync(path.join(consoleDir, "data.json"), json);
@@ -381,7 +583,8 @@ function cmdScan(args) {
       .readFileSync(path.join(consoleDir, "app.html"), "utf8")
       .replace('<link rel="stylesheet" href="global.css">', `<style>\n${css}\n</style>`);
     const safe = json.replace(/</g, "\\u003c");
-    const injected = app.replace("<!--__DATA__-->", `<script>window.__DATA__ = ${safe};</` + `script>`);
+    // replacer function: `$&`/`$'` inside serialized data must stay literal
+    const injected = app.replace("<!--__DATA__-->", () => `<script>window.__DATA__ = ${safe};</` + `script>`);
     fs.writeFileSync(path.join(consoleDir, "snapshot.html"), injected);
     console.log("console/snapshot.html written — self-contained page");
   }
@@ -587,11 +790,11 @@ function cmdCheck(args) {
 
 // ---------------------------------------------------------------- console
 
-function cmdConsole(args) {
+async function cmdConsole(args) {
   const portIdx = args.indexOf("--port");
   const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 4770;
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const name = url.pathname === "/" ? "app.html" : url.pathname.replace(/^\/+/, "");
     if (name === "app.html" || name === "index.html") {
@@ -599,7 +802,7 @@ function cmdConsole(args) {
       return res.end(fs.readFileSync(path.join(consoleDir, "app.html"), "utf8"));
     }
     if (name === "data.json") {
-      const data = scanAll();
+      const data = await scanAll();
       fs.writeFileSync(path.join(consoleDir, "data.json"), JSON.stringify(data, null, 2));
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       return res.end(JSON.stringify(data));
@@ -614,6 +817,7 @@ function cmdConsole(args) {
       const roots = [
         HUB,
         expand(registry.scratchRoot),
+        expand(registry.worktreesRoot || "~/dev/.onepersonco/worktrees"),
         path.join(os.homedir(), ".t3", "worktrees"),
         path.join(os.homedir(), "dev", "agents-worktrees"),
         ...registry.projects.map((p) => expand(p.path)),
@@ -647,7 +851,7 @@ function cmdConsole(args) {
     process.exit(1);
   });
 
-  const data = scanAll();
+  const data = await scanAll();
   const h = data.health;
   const healthLine = h.errors + h.warnings + h.infos ? `health: ${healthCounts(h)}` : "health: clean";
   const pending = data.projects.filter((p) => p.exists && !p.backlog).map((p) => p.id);
@@ -660,7 +864,7 @@ function cmdConsole(args) {
 
 // ---------------------------------------------------------------- main
 
-function main() {
+async function main() {
   const [cmd, ...args] = process.argv.slice(2);
   if (cmd === "sync") return cmdSync(args);
   if (cmd === "check") return cmdCheck(args);
@@ -670,9 +874,7 @@ function main() {
   process.exit(2);
 }
 
-try {
-  main();
-} catch (err) {
+main().catch((err) => {
   console.error(`opc ${process.argv[2] || ""} failed: ${err.message}`);
   process.exit(1);
-}
+});

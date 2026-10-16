@@ -6,8 +6,6 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 
 ## Now
 
-- [ ] P3 · Worktrees view in the console — every project's checkouts (OPC root · T3 · legacy) with branch, dirty, ahead/behind, PR status via `gh`, clickable paths, and a "safe to remove" hint when merged + clean
-
 ## Next
 
 - [ ] Retrofit blocos — backlog seed from the P2-xx roadmaps, `flutter` + `ts-firebase` overlays, consider Greptile parity
@@ -18,6 +16,7 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 - [ ] P4 · Worktrees follow-ups — drift vs standards, backlog delta vs main, cleanup action
 - [ ] P4 · `opc sync`/`check` — reject unknown flags instead of ignoring them (a typo like `-dir` silently falls back to the CWD/control-room target)
 - [ ] Lifetime · Fold legacy worktrees (`~/dev/agents-worktrees/`, `~/dev/*-wt-*`) into the worktrees root as they finish
+- [ ] P4 · Legacy worktree root — `~/dev/agents-worktrees/planner-*` are not git worktrees (stale leftovers; inspect and remove)
 - [ ] P5 · Skeleton extraction + `opc new` for future projects
 - [ ] P5 · `opc bootstrap` — script the README's new-machine steps (scratch dirs, gitignore safety net, registry check)
 
@@ -41,3 +40,4 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 - [x] Skills v1 — `opc-delegate` + `opc-task-loop` authored in `skills/`, installed machine-wide via the skills CLI — 2026-10-16
 - [x] Standards · Backlog source-of-truth + orchestrator closing duty; both skills refreshed — 2026-10-16
 - [x] P4 · Worktree awareness for `opc sync`/`check` — target the active worktree, not the registry's main checkout (a live sync wrote into gymbloc's main during the retrofit; reverted by hand) — 2026-10-16
+- [x] P3 · Worktrees view in the console — every project's checkouts (OPC root · T3 · legacy) with branch, dirty, ahead/behind, PR status via `gh`, clickable paths, and a "safe to remove" hint when merged + clean — 2026-10-16

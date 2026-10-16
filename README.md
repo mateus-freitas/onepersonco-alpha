@@ -107,7 +107,7 @@ that has not adopted the standards yet shows as "pending retrofit" in
 ## Daily use
 
 - `opc check [--dir <checkout>]` — deterministic health: drift, markers, backlog lines, links; audits the checkout you run it from (worktree included); the hub's main checkout still audits every project; `--dir` overrides
-- `opc console` — the console; rescans on every load
+- `opc console` — the console; rescans on every load (board · worktrees · RFCs · docs · prompts · health)
 - `opc sync [project…] [--dir <checkout>]` — push standards changes into standardized projects; targets the checkout you run it from (worktree included); the hub's main checkout still syncs all standardized projects; `--dir` overrides
 - `opc scan --snapshot` — refresh the self-contained `console/snapshot.html`
 
@@ -118,7 +118,10 @@ that has not adopted the standards yet shows as "pending retrofit" in
   Other projects pick it up at their next sync — the `git-pr` fragment's
   standards-sync carve-out explains how those commits travel.
 - **The console** is `console/app.html` + `console/global.css` (the shadcn preset
-  theme; dark by default; every color is a token). No build step, no deps.
+  theme; dark by default; every color is a token). No build step, no deps. The
+  Worktrees tab lists every project's linked checkouts (branch, dirty, ahead/behind
+  vs local `main`, last commit, PR state via `gh`, clickable paths); without an
+  authenticated `gh` the PR states are hidden and the scan still works.
 - **The CLI** is `scripts/opc.mjs` — plain Node, stdlib only. Keep it
   dependency-free; `node --check` + `opc check` before committing.
 - **Skills** live in `skills/<name>/SKILL.md`. Quote frontmatter descriptions
