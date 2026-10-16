@@ -4,67 +4,159 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>One Person Company — alpha</title>
+<script>
+  // System preference drives the .dark class unless the toggle overrides it.
+  const _mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const _apply = (d) => document.documentElement.classList.toggle("dark", d);
+  _apply(_mq.matches);
+  if (_mq.addEventListener) _mq.addEventListener("change", (e) => _apply(e.matches));
+</script>
 <style>
-  :root{
-    --fg: var(--foreground, #e8e8ea);
-    --mut: var(--muted-foreground, #9a9aa3);
-    --line: var(--border, rgba(140,140,150,.35));
-    --card: var(--card, rgba(140,140,150,.07));
-    --card2: var(--secondary, rgba(140,140,150,.14));
-    --accent: var(--accent, #7c6cf0);
-    --accentf: var(--accent-foreground, #8f7bff);
-    --ok: var(--success, #3fae6a);
-    --warn: var(--warning, #d99b2b);
-    --radius: var(--radius, 10px);
-    --mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-    --sans: var(--font-sans, -apple-system, "Segoe UI", sans-serif);
-    --p1: var(--chart-1, #5b8def);
-    --p2: var(--chart-2, #d9a02a);
-    --p3: var(--chart-3, #9a6de0);
-  }
-  *{box-sizing:border-box}
-  body{margin:0;color:var(--fg);background:var(--background, transparent);font:13.5px/1.5 var(--sans)}
-  .wrap{display:flex;flex-direction:column;gap:18px}
-  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
-  header h1{font-size:15px;margin:0}
-  header .sub{color:var(--mut);font-size:11.5px;font-family:var(--mono)}
-  header .right{margin-left:auto;display:flex;gap:8px;align-items:center}
-  .pill{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:99px;padding:2px 8px;color:var(--mut)}
-  button.pill{cursor:pointer;background:transparent;color:var(--fg)}
-  button.pill:hover{border-color:var(--accent)}
+/* One Person Company — alpha · global theme
+   Shadcn preset b3DqcrPhnm (neutral, radius 0). Used by every alpha tool UI. */
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* Minimal shadcn-like defaults for the alpha tools (no build step) */
+
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+code, pre, kbd, .mono, .sub {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+}
+
+::selection { background: var(--secondary); color: var(--secondary-foreground); }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+</style>
+<style>
+  /* board-only layout on top of global.css; all colors come from theme tokens */
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 20px 36px;display:flex;flex-direction:column;gap:16px}
+  header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:-.01em}
+  .pill{font-size:10px;border:1px solid var(--border);border-radius:var(--radius);padding:2px 8px;color:var(--muted-foreground)}
+  .sub{color:var(--muted-foreground);font-size:11px}
+  header .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .btn{font:inherit;font-size:11.5px;padding:5px 10px;border:1px solid var(--border);background:transparent;color:var(--foreground);border-radius:var(--radius);cursor:pointer}
+  .btn:hover{background:var(--accent);color:var(--accent-foreground)}
   .chips{display:flex;gap:6px;flex-wrap:wrap}
-  .chip{font-size:11.5px;border:1px solid var(--line);border-radius:99px;padding:4px 10px;color:var(--mut);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-  .chip.on{border-color:var(--accent);color:var(--fg);background:var(--card)}
-  .chip .dot{width:7px;height:7px;border-radius:50%;flex:none}
-  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding-bottom:8px}
-  .tab{font-size:12.5px;padding:4px 10px;border-radius:99px;color:var(--mut);cursor:pointer;background:transparent;border:none}
-  .tab.on{background:var(--card2);color:var(--fg);font-weight:600}
-  .tab .n{font-family:var(--mono);font-size:10px;opacity:.7;margin-left:4px}
-  .banner{border:1px dashed var(--line);border-radius:var(--radius);padding:10px 14px;color:var(--mut);font-size:12px}
-  .banner b{color:var(--fg)}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;color:var(--muted-foreground);cursor:pointer;background:transparent}
+  .chip:hover{background:var(--accent);color:var(--accent-foreground)}
+  .chip.on{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+  .chip.on .dot{background:currentColor;border-color:currentColor}
+  .dot{display:inline-block;width:6px;height:6px;border-radius:999px;flex:none}
+  .pa{background:var(--primary)}
+  .pb{background:color-mix(in srgb, var(--primary) 55%, var(--background))}
+  .pc{background:color-mix(in srgb, var(--primary) 30%, var(--background))}
+  .pd{background:color-mix(in srgb, var(--primary) 16%, var(--background))}
+  .tabs{display:flex;gap:2px;background:var(--muted);padding:3px;border-radius:var(--radius);width:max-content;max-width:100%;flex-wrap:wrap}
+  .tab{font:inherit;font-size:12px;padding:5px 12px;border-radius:var(--radius);border:none;background:transparent;color:var(--muted-foreground);cursor:pointer}
+  .tab:hover{color:var(--foreground)}
+  .tab.on{background:var(--background);color:var(--foreground);font-weight:500;box-shadow:0 1px 2px rgb(0 0 0 / .06)}
+  .tab .n{font-size:10px;margin-left:5px;opacity:.7}
+  .banner{border:1px dashed var(--border);border-radius:var(--radius);padding:10px 14px;color:var(--muted-foreground);font-size:12px}
+  .banner b{color:var(--foreground)}
   .cols{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
   @media (max-width:680px){.cols{grid-template-columns:repeat(2,1fr)}}
-  .col{border:1px solid var(--line);border-radius:var(--radius);padding:10px;min-height:80px;display:flex;flex-direction:column;gap:8px}
-  .col .hd{font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);display:flex;gap:6px}
-  .card{border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:var(--card);font-size:12px}
-  .card .meta{display:flex;gap:6px;align-items:center;color:var(--mut);font-size:10.5px;font-family:var(--mono);margin-top:5px;flex-wrap:wrap}
+  .col{border:1px solid var(--border);border-radius:var(--radius);padding:10px;display:flex;flex-direction:column;gap:8px;min-height:80px;background:var(--card)}
+  .col .hd{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground);display:flex;gap:6px;align-items:center}
+  .col .hd em{font-style:normal;font-weight:400;opacity:.7}
+  .card{border:1px solid var(--border);border-radius:var(--radius);padding:9px 10px;background:var(--background);font-size:12px}
+  .card .t{line-height:1.4}
+  .card .meta{display:flex;gap:6px;align-items:center;color:var(--muted-foreground);font-size:10.5px;margin-top:6px;flex-wrap:wrap}
   .card.done{opacity:.55}
   .card.done .t{text-decoration:line-through}
-  .card .t{line-height:1.35}
-  .dot{width:7px;height:7px;border-radius:50%;flex:none}
-  .tag{font-size:9.5px;font-family:var(--mono);border:1px solid var(--line);border-radius:99px;padding:1px 7px;color:var(--mut)}
-  .tag.ok{border-color:color-mix(in srgb, var(--ok) 55%, var(--line));color:var(--ok)}
-  .tag.warn{border-color:color-mix(in srgb, var(--warn) 55%, var(--line));color:var(--warn)}
+  .tag{font-size:9.5px;border:1px solid var(--border);border-radius:var(--radius);padding:1px 6px;color:var(--muted-foreground)}
+  .tag.solid{background:var(--secondary);border-color:transparent;color:var(--secondary-foreground)}
+  .tag.danger{color:var(--destructive);border-color:color-mix(in srgb, var(--destructive) 45%, transparent)}
   .list{display:flex;flex-direction:column;gap:8px}
-  .row{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12.5px}
-  .row .k{font-family:var(--mono);font-size:10.5px;color:var(--mut)}
   table{width:100%;border-collapse:collapse;font-size:12px}
-  th{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--mut);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
-  td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-  td.mono,.mono{font-family:var(--mono);font-size:10.5px;color:var(--mut)}
-  .empty{color:var(--mut);font-size:12px;padding:10px 2px}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600}
+  td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+  td.mono{font-size:10.5px;color:var(--muted-foreground)}
+  .empty{color:var(--muted-foreground);font-size:12px;padding:8px 2px}
   .sessions{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
-  footer{color:var(--mut);font-size:11px;font-family:var(--mono)}
+  .group-hd{color:var(--muted-foreground);font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin:4px 0 8px;display:flex;align-items:center;gap:6px}
+  footer{color:var(--muted-foreground);font-size:11px}
 </style>
 </head>
 <body>
@@ -72,7 +164,10 @@
   <header>
     <h1>One Person Company <span class="pill">alpha</span></h1>
     <span class="sub" id="gen"></span>
-    <span class="right"><button class="pill" id="rescan" style="display:none">rescan</button></span>
+    <span class="right">
+      <button class="btn" id="theme" title="Toggle light / dark">◐ theme</button>
+      <button class="btn" id="rescan" style="display:none">rescan</button>
+    </span>
   </header>
   <nav class="chips" id="chips"></nav>
   <nav class="tabs" id="tabs"></nav>
@@ -80,7 +175,7 @@
   <footer id="foot"></footer>
 </div>
 <script>window.__DATA__ = {
-  "generatedAt": "2026-10-16T11:23:37.905Z",
+  "generatedAt": "2026-10-16T12:39:50.882Z",
   "org": "One Person Company (alpha)",
   "scratchRoot": "~/dev/.onepersonco",
   "projects": [
@@ -119,17 +214,10 @@
       "standardized": true,
       "exists": true,
       "branch": "main",
-      "lastCommit": "2026-10-16 feat(standards): docs/guides for human how-tos; backlog reordered for the alpha-complete pass",
-      "dirty": 3,
+      "lastCommit": "2026-10-16 feat(opc): board v1 — scan, localhost serve, snapshot",
+      "dirty": 5,
       "backlog": {
         "Now": [
-          {
-            "title": "P3 · Board v1 — `opc scan` + localhost views (kanban, RFCs, prompts, evidence) from the registry and scratch",
-            "spec": null,
-            "priority": null,
-            "date": null,
-            "checked": false
-          },
           {
             "title": "P3 · Finalize the alpha — dogfood pass: the hub follows everything it prescribes, the board renders it, checks come back green",
             "spec": null,
@@ -163,7 +251,7 @@
         ],
         "Later": [
           {
-            "title": "P4 · Worktree awareness + write-back (drag to restatus edits the backlog line)",
+            "title": "P4 · Worktree awareness + write-back (drag to restatus edits the backlog line); `opc` shim on PATH",
             "spec": null,
             "priority": null,
             "date": null,
@@ -198,6 +286,20 @@
             "priority": null,
             "date": "2026-10-16",
             "checked": true
+          },
+          {
+            "title": "P3 · Board v1 — `opc scan` + `opc board` + self-contained snapshot; kanban, RFCs, docs, prompts views",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          },
+          {
+            "title": "P3 · Board restyle — shadcn preset theme in `board/global.css`, readable defaults, dark mode toggle; snapshot inlines the theme",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
           }
         ]
       },
@@ -211,14 +313,13 @@
 const $ = (s, el = document) => el.querySelector(s);
 let DATA = window.__DATA__ || null;
 const state = { tab: "board", project: "all" };
-const colors = new Map();
-const colorOf = (id) => { if (!colors.has(id)) colors.set(id, "var(--p" + ((colors.size % 3) + 1) + ")"); return colors.get(id); };
+const pcls = new Map();
+const pclass = (id) => { if (!pcls.has(id)) pcls.set(id, ["pa", "pb", "pc", "pd"][pcls.size % 4]); return pcls.get(id); };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const icon = (ok) => ok ? "☑" : "☐";
 
 const filtered = () => state.project === "all" ? DATA.projects : DATA.projects.filter((p) => p.id === state.project);
 const backlogOf = (p) => p.backlog || { Now: [], Next: [], Later: [], Done: [] };
-const allBacklog = () => filtered().flatMap((p) => ["Now", "Next", "Later", "Done"].flatMap((s) => backlogOf(p)[s]));
 const docsOf = (p) => p.docs || [];
 const allDocs = () => filtered().flatMap((p) => docsOf(p).map((d) => ({ ...d, project: p.id })));
 const sessionsOf = (p) => p.promptSessions || [];
@@ -226,27 +327,18 @@ const allSessions = () => filtered().flatMap((p) => sessionsOf(p).map((s) => ({ 
 
 function chip(id, name, extra) {
   return '<span class="chip' + (state.project === id ? " on" : "") + '" data-project="' + id + '">' +
-    '<span class="dot" style="background:' + (id === "all" ? "var(--mut)" : colorOf(id)) + '"></span>' +
-    esc(name) + (extra ? ' <span class="tag">' + esc(extra) + "</span>" : "") + "</span>";
+    (id === "all" ? "" : '<span class="dot ' + pclass(id) + '"></span>') + esc(name) +
+    (extra ? ' <span class="tag">' + esc(extra) + "</span>" : "") + "</span>";
 }
 
 function renderChips() {
-  const pending = DATA.projects.filter((p) => p.exists && !p.backlog).length;
-  $("#chips").innerHTML =
-    chip("all", "All") +
+  $("#chips").innerHTML = chip("all", "All") +
     DATA.projects.map((p) => chip(p.id, p.id, !p.exists ? "missing" : !p.backlog ? "pending retrofit" : null)).join("");
 }
 
 function renderTabs() {
   const rfcCount = allDocs().filter((d) => ["rfc", "adr"].includes(d.type)).length;
-  const docsCount = allDocs().length;
-  const sessCount = allSessions().length;
-  const tabs = [
-    ["board", "Board"],
-    ["rfcs", "RFCs", rfcCount],
-    ["docs", "Docs", docsCount],
-    ["prompts", "Prompts", sessCount],
-  ];
+  const tabs = [["board", "Board"], ["rfcs", "RFCs", rfcCount], ["docs", "Docs", allDocs().length], ["prompts", "Prompts", allSessions().length]];
   $("#tabs").innerHTML = tabs.map(([id, label, n]) =>
     '<button class="tab' + (state.tab === id ? " on" : "") + '" data-tab="' + id + '">' + label +
     (n ? '<span class="n">' + n + "</span>" : "") + "</button>").join("");
@@ -255,13 +347,15 @@ function renderTabs() {
 function renderBoard() {
   const pending = filtered().filter((p) => !p.exists || !p.backlog);
   const banner = pending.length
-    ? '<div class="banner">' + pending.map((p) => "<b>" + esc(p.id) + "</b>" + (p.exists ? " — registered, waiting for its retrofit (no <span class=\"mono\">docs/backlog.md</span> yet)" : " — path missing")).join("<br>") + "</div>"
+    ? '<div class="banner">' + pending.map((p) => "<b>" + esc(p.id) + "</b>" + (p.exists
+      ? ' — registered, waiting for its retrofit (no <span class="mono">docs/backlog.md</span> yet)'
+      : " — path missing")).join("<br>") + "</div>"
     : "";
   const cols = ["Now", "Next", "Later", "Done"].map((s) => {
     const items = filtered().flatMap((p) => backlogOf(p)[s].map((i) => ({ ...i, project: p.id })));
     const cards = items.length ? items.map((i) => {
       const meta = [
-        '<span class="dot" style="background:' + colorOf(i.project) + '"></span>' + esc(i.project),
+        '<span class="dot ' + pclass(i.project) + '"></span>' + esc(i.project),
         i.spec ? '<span class="tag">spec ↗</span>' : "",
         i.priority ? '<span class="tag">' + esc(i.priority) + "</span>" : "",
         i.date ? '<span class="tag">' + esc(i.date) + "</span>" : "",
@@ -276,20 +370,18 @@ function renderBoard() {
 function renderRfcs() {
   const items = allDocs().filter((d) => ["rfc", "adr"].includes(d.type));
   if (!items.length) return '<div class="empty">No RFCs or ADRs with board headers yet.</div>';
-  return '<div class="list">' + items.map((d) => {
-    const cls = d.status === "accepted" || d.status === "done" ? "ok" : d.status === "proposed" ? "warn" : "";
-    return '<div class="card"><div class="t"><span class="tag">' + esc(d.type.toUpperCase()) + "</span> " + esc(d.title) + "</div>" +
-      '<div class="meta"><span class="dot" style="background:' + colorOf(d.project) + '"></span>' + esc(d.project) +
-      ' <span class="tag ' + cls + '">' + esc(d.status || "?") + "</span>" +
-      (d.date ? " " + esc(d.date) : "") + ' <span class="mono">' + esc(d.file) + "</span></div></div>";
-  }).join("") + "</div>";
+  return '<div class="list">' + items.map((d) =>
+    '<div class="card"><div class="t"><span class="tag">' + esc((d.type || "").toUpperCase()) + "</span> " + esc(d.title) + "</div>" +
+    '<div class="meta"><span class="dot ' + pclass(d.project) + '"></span>' + esc(d.project) +
+    ' <span class="tag' + (["accepted", "done"].includes(d.status) ? " solid" : "") + '">' + esc(d.status || "?") + "</span>" +
+    (d.date ? " <span class=\"tag\">" + esc(d.date) + "</span>" : "") + ' <span class="mono">' + esc(d.file) + "</span></div></div>").join("") + "</div>";
 }
 
 function renderDocs() {
   const items = allDocs();
   if (!items.length) return '<div class="empty">No docs with board headers yet.</div>';
   return "<table><thead><tr><th>project</th><th>type</th><th>status</th><th>date</th><th>title</th><th>path</th></tr></thead><tbody>" +
-    items.map((d) => "<tr><td class='mono'><span class='dot' style='display:inline-block;background:" + colorOf(d.project) + "'></span> " + esc(d.project) + "</td><td>" + esc(d.type || "") + "</td><td>" + esc(d.status || "") + "</td><td class='mono'>" + esc(d.date || "") + "</td><td>" + esc(d.title) + "</td><td class='mono'>" + esc(d.file) + "</td></tr>").join("") +
+    items.map((d) => "<tr><td class='mono'><span class='dot " + pclass(d.project) + "'></span> " + esc(d.project) + "</td><td>" + esc(d.type || "") + "</td><td>" + esc(d.status || "") + "</td><td class='mono'>" + esc(d.date || "") + "</td><td>" + esc(d.title) + "</td><td class='mono'>" + esc(d.file) + "</td></tr>").join("") +
     "</tbody></table>";
 }
 
@@ -298,22 +390,20 @@ function renderPrompts() {
     const sessions = sessionsOf(p);
     const legacy = p.legacyInRepoPrompts || p.legacyPromptFiles;
     const legacyNote = legacy ? '<div class="empty">' + legacy + " legacy prompt file(s) still inside the repo — move to scratch at retrofit</div>" : "";
-    if (!sessions.length && !legacyNote) return "";
     const cards = sessions.map((s) => {
       const age = Math.round((Date.now() - new Date(s.mtime + "T12:00:00").getTime()) / 86400000);
-      const stale = age > 7 ? ' <span class="tag warn">stale ' + age + "d</span>" : "";
-      return '<div class="card"><div class="t">📁 ' + esc(s.name) + '</div><div class="meta">' + s.files + " file(s)" + (s.date ? " · " + esc(s.date) : "") + stale + "</div></div>";
+      const stale = age > 7 ? ' <span class="tag danger">stale ' + age + "d</span>" : "";
+      return '<div class="card"><div class="t">' + esc(s.name) + '</div><div class="meta"><span class="mono">' + s.files + " file(s)" + (s.date ? " · " + esc(s.date) : "") + "</span>" + stale + "</div></div>";
     }).join("");
-    return '<div><div class="hd mono" style="color:var(--mut);font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin:4px 0 8px"><span class="dot" style="display:inline-block;background:' + colorOf(p.id) + '"></span> ' + esc(p.id) + "</div><div class='sessions'>" + cards + "</div>" + legacyNote + "</div>";
+    if (!sessions.length && !legacyNote) return "";
+    return '<div><div class="group-hd"><span class="dot ' + pclass(p.id) + '"></span>' + esc(p.id) + '</div><div class="sessions">' + (cards || '<div class="empty">no active sessions in scratch</div>') + "</div>" + legacyNote + "</div>";
   }).join("");
   return groups || '<div class="empty">No active prompt sessions in scratch.</div>';
 }
 
 function renderFoot() {
-  const projs = filtered();
-  $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc board` for the live board · "
-    : "live · data rescans on every load · ") +
-    projs.map((p) => p.id + (p.branch ? "@" + p.branch : "") + (p.dirty ? " ✎" + p.dirty : "")).join("  ·  ");
+  $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc board` for the live board · " : "live · data rescans on every load · ") +
+    filtered().map((p) => p.id + (p.branch ? "@" + p.branch : "") + (p.dirty ? " ✎" + p.dirty : "")).join("  ·  ");
 }
 
 function render() {
@@ -332,6 +422,7 @@ document.addEventListener("click", (e) => {
   if (chipEl) { state.project = chipEl.dataset.project; render(); return; }
   const tabEl = e.target.closest("[data-tab]");
   if (tabEl) { state.tab = tabEl.dataset.tab; render(); return; }
+  if (e.target.id === "theme") { document.documentElement.classList.toggle("dark"); return; }
   if (e.target.id === "rescan") { DATA = null; load(); }
 });
 
@@ -340,7 +431,7 @@ async function load() {
     try { DATA = await (await fetch("./data.json", { cache: "no-store" })).json(); }
     catch (err) { $("#view").innerHTML = '<div class="empty">data.json not readable — run `opc scan` first</div>'; return; }
   }
-  colors.clear();
+  pcls.clear();
   render();
 }
 load();

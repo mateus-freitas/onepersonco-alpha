@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T11:25:46.563Z",
+  "generatedAt": "2026-10-16T12:39:50.882Z",
   "org": "One Person Company (alpha)",
   "scratchRoot": "~/dev/.onepersonco",
   "projects": [
@@ -38,8 +38,8 @@
       "standardized": true,
       "exists": true,
       "branch": "main",
-      "lastCommit": "2026-10-16 feat(standards): docs/guides for human how-tos; backlog reordered for the alpha-complete pass",
-      "dirty": 4,
+      "lastCommit": "2026-10-16 feat(opc): board v1 — scan, localhost serve, snapshot",
+      "dirty": 5,
       "backlog": {
         "Now": [
           {
@@ -113,6 +113,13 @@
           },
           {
             "title": "P3 · Board v1 — `opc scan` + `opc board` + self-contained snapshot; kanban, RFCs, docs, prompts views",
+            "spec": null,
+            "priority": null,
+            "date": "2026-10-16",
+            "checked": true
+          },
+          {
+            "title": "P3 · Board restyle — shadcn preset theme in `board/global.css`, readable defaults, dark mode toggle; snapshot inlines the theme",
             "spec": null,
             "priority": null,
             "date": "2026-10-16",

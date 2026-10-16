@@ -222,7 +222,10 @@ function cmdScan(args) {
   }, 0);
   console.log(`board/data.json written — ${data.projects.length} project(s), ${lines} backlog line(s)`);
   if (args.includes("--snapshot")) {
-    const app = fs.readFileSync(path.join(boardDir, "app.html"), "utf8");
+    const css = fs.readFileSync(path.join(boardDir, "global.css"), "utf8");
+    const app = fs
+      .readFileSync(path.join(boardDir, "app.html"), "utf8")
+      .replace('<link rel="stylesheet" href="global.css">', `<style>\n${css}\n</style>`);
     const safe = json.replace(/</g, "\\u003c");
     const injected = app.replace("<!--__DATA__-->", `<script>window.__DATA__ = ${safe};</` + `script>`);
     fs.writeFileSync(path.join(boardDir, "snapshot.html"), injected);
@@ -239,15 +242,22 @@ function cmdBoard(args) {
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
-    if (url.pathname === "/" || url.pathname === "/index.html") {
+    const name = url.pathname === "/" ? "app.html" : url.pathname.replace(/^\/+/, "");
+    if (name === "app.html" || name === "index.html") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       return res.end(appHtml);
     }
-    if (url.pathname === "/data.json") {
+    if (name === "data.json") {
       const data = scanAll();
       fs.writeFileSync(path.join(boardDir, "data.json"), JSON.stringify(data, null, 2));
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       return res.end(JSON.stringify(data));
+    }
+    const file = path.join(boardDir, name);
+    if (!name.includes("..") && fs.existsSync(file) && fs.statSync(file).isFile()) {
+      const type = name.endsWith(".css") ? "text/css" : name.endsWith(".html") ? "text/html" : "text/plain";
+      res.writeHead(200, { "content-type": `${type}; charset=utf-8` });
+      return res.end(fs.readFileSync(file));
     }
     res.writeHead(404);
     res.end("not found");
