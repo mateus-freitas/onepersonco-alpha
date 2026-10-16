@@ -15,6 +15,7 @@ version gets the `onepersonco` name — this checkout keeps `-alpha`.
 | `skeleton/` | template for new projects, extracted from blocos + gymbloc |
 | `board/` | local visual board: scan → index → localhost UI |
 | `scripts/` | the `opc` CLI: `sync` · `check` · `scan` · `board` (`new` comes with the skeleton) |
+| `skills/` | cross-harness agent skills (`opc-delegate`, `opc-task-loop`); install machine-wide with `npx skills add mateus-freitas/onepersonco-alpha` |
 
 Scratch lives *outside* every repo, in the hidden sibling `~/dev/.onepersonco/`
 (see its README). Nothing there is committed anywhere; nothing there is a source

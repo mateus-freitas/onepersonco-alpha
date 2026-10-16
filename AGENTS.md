@@ -59,6 +59,19 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 - Conventional titles in plain language: `fix(editor): sets no longer jump after ...`.
 
+### Standards sync (generated)
+
+`opc sync` output is generated from the hub fragments — never authored work.
+
+- Commit it on its own with `chore(standards): sync …`; the only required
+  evidence is `opc check` green on that head (byte-compare; no review gates,
+  no task brief).
+- Route it as a micro-PR when the project prefers PRs for everything (the
+  owner merges it without reviews), or commit it directly to the default
+  branch when the project permits direct maintenance commits — the only
+  documented exception to the no-direct-push rule above.
+- Never mix sync output with authored changes in one commit.
+
 ### Pull requests
 
 - One request is one PR; split only when the objective genuinely spans unrelated
@@ -176,34 +189,15 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 ## Orchestration (agents running agents)
 
-- The running agent is the orchestrator: it owns architecture, interface
-  decisions, task breakdown, review of worker output, and every commit. Explicit
-  user instructions win over this block.
-- Delegate bounded work that can be verified independently; keep in the
-  orchestrator everything that needs taste (interfaces, integration, wording)
-  or that touches shared state.
-- Worker model and effort selection follows `agent-model-selection`. Cheap
-  capable models are the default for a well-specified brief; step up only per
-  that policy.
-- Every worker gets a complete brief saved as `TASK.md` in the task's scratch
-  folder (`prompts/<date>-<slug>/`): the files it owns, the deliverable, the
-  verification it must run, and its limits. Parallel workers get disjoint file
-  ownership — never two workers on one file.
-- Workers never commit, push, or merge. They leave the tree dirty and record
-  decisions, evidence, and open questions in the task folder's `NOTES.md`.
-- Isolated worktrees live under the worktrees root registered in
-  `projects.json` (`~/dev/.onepersonco/worktrees/<project>/<slug>/`). Create
-  them there and bind the thread to the path; app-managed checkouts (T3's
-  `~/.t3/worktrees/`) are acceptable. Legacy `~/dev/agents-worktrees/` and
-  `~/dev/*-wt-*` checkouts are grandfathered, not a pattern.
-- The orchestrator reviews every diff, re-runs the verification itself, and only
-  then commits. "The worker said it passes" is not verification.
-- Prefer async delegation over polling: end the turn and let completion wake the
-  orchestrator when the worker finishes.
-- Delegation does not replace the project's review gates; substantial changes
-  still get the independent review.
-- Report back honestly: verified state, what was skipped, and anything the owner
-  must decide.
+- Before delegating work to other agents, load the `opc-delegate` skill — it
+  carries the full procedure (briefs, disjoint ownership, launching, verifying).
+- Non-negotiables: workers never commit, push, or merge; the orchestrator
+  verifies every diff itself and owns every commit; delegation never replaces
+  the project's review gates; explicit user instructions always win.
+- Model and effort selection follows `agent-model-selection`.
+- Isolated worktrees live under the worktrees root in `projects.json`
+  (`~/dev/.onepersonco/worktrees/<project>/<slug>/`); app-managed checkouts
+  (T3's `~/.t3/worktrees/`) are acceptable; legacy paths are grandfathered.
 <!-- opc:end orchestration -->
 
 ## Local conventions
@@ -212,5 +206,7 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   branches or PRs for this repo unless a change is risky.
 - Consistency: standardized projects are kept in line by `opc sync` and
   `opc check`. Drift is a bug, not a style choice.
+- Skills: after editing `skills/`, run `npx skills update` so every harness
+  picks the change up.
 - Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc board` (rescans on every open). `opc new` arrives with the skeleton.
 - The hub itself is registered in `projects.json`, so the board covers it.

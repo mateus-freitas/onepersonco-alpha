@@ -39,6 +39,19 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 - Conventional titles in plain language: `fix(editor): sets no longer jump after ...`.
 
+### Standards sync (generated)
+
+`opc sync` output is generated from the hub fragments — never authored work.
+
+- Commit it on its own with `chore(standards): sync …`; the only required
+  evidence is `opc check` green on that head (byte-compare; no review gates,
+  no task brief).
+- Route it as a micro-PR when the project prefers PRs for everything (the
+  owner merges it without reviews), or commit it directly to the default
+  branch when the project permits direct maintenance commits — the only
+  documented exception to the no-direct-push rule above.
+- Never mix sync output with authored changes in one commit.
+
 ### Pull requests
 
 - One request is one PR; split only when the objective genuinely spans unrelated

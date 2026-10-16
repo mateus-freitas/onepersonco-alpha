@@ -112,9 +112,11 @@ function syncFile(projectDir, rel, body, fragmentFile) {
   return true;
 }
 
-function cmdSync() {
+function cmdSync(args = []) {
+  const only = args.filter((a) => !a.startsWith("-"));
   let changes = 0;
   for (const project of registry.projects) {
+    if (only.length && !only.includes(project.id)) continue;
     if (!project.standardized) {
       console.log(`${project.id}: pending retrofit (skipped)`);
       continue;
@@ -552,11 +554,11 @@ function cmdBoard(args) {
 
 function main() {
   const [cmd, ...args] = process.argv.slice(2);
-  if (cmd === "sync") return cmdSync();
+  if (cmd === "sync") return cmdSync(args);
   if (cmd === "check") return cmdCheck(args);
   if (cmd === "scan") return cmdScan(args);
   if (cmd === "board") return cmdBoard(args);
-  console.log("usage:\n  opc sync                compose standards into standardized projects\n  opc check [--json]      deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write board/data.json (and a self-contained snapshot.html)\n  opc board [--port N]    serve the board at http://localhost:N");
+  console.log("usage:\n  opc sync [project…]     compose standards into standardized projects (all, or named ones)\n  opc check [--json]      deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write board/data.json (and a self-contained snapshot.html)\n  opc board [--port N]    serve the board at http://localhost:N");
   process.exit(2);
 }
 
