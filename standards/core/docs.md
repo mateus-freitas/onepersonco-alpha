@@ -32,6 +32,12 @@
 - Prompts, active plans, research notes, and artifacts live in the scratch root
   registered in `projects.json` (`~/dev/.onepersonco/<project>/`) — never
   committed. Durable knowledge graduates into the repo or it does not count.
+- No new `plans/` (or research) folders in repos. Existing committed plan and
+  research documents are grandfathered and may stay, but new working plans live
+  in scratch only; when the work lands, distill what is durable into
+  `internals/` or an RFC/ADR — new or an update to an existing one — and let
+  the merged PR be the implementation record. The plan file itself is
+  discarded, not committed.
 - Evidence for finished work lands in the project's evidence folder or the PR
   body.
 
