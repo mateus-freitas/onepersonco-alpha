@@ -9,6 +9,7 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 ## Next
 
 - [ ] Retrofit blocos — backlog seed from the P2-xx roadmaps, `flutter` + `ts-firebase` overlays, consider Greptile parity
+- [ ] Sync gymbloc — `opc check` reports AGENTS.md drift on its main (run `opc sync` there)
 
 ## Later
 
