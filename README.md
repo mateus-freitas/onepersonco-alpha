@@ -77,6 +77,8 @@ projects that have adopted the standards — the ones `opc sync` writes to.
 
 ### 6 · Verify
 
+`opc sync`/`opc check` follow the checkout you run them from — inside a project worktree they answer "is my branch in sync / healthy?" before a merge; from the hub's main checkout they still cover every registered project.
+
 ```sh
 opc check         # expect 0 errors; info = pending retrofits, not problems
 opc sync          # expect "up to date" for standardized projects
@@ -104,9 +106,9 @@ that has not adopted the standards yet shows as "pending retrofit" in
 
 ## Daily use
 
-- `opc check` — deterministic health: drift, markers, backlog lines, links
+- `opc check [--dir <checkout>]` — deterministic health: drift, markers, backlog lines, links; audits the checkout you run it from (worktree included); the hub's main checkout still audits every project; `--dir` overrides
 - `opc board` — the board; rescans on every load
-- `opc sync [project]` — push standards changes into standardized projects
+- `opc sync [project…] [--dir <checkout>]` — push standards changes into standardized projects; targets the checkout you run it from (worktree included); the hub's main checkout still syncs all standardized projects; `--dir` overrides
 - `opc scan --snapshot` — refresh the self-contained `board/snapshot.html`
 
 ## Working on the hub itself
