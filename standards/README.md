@@ -19,7 +19,7 @@ Marker convention (first line of every fragment):
 | --- | --- | --- |
 | `core/git-pr.md` | block `git-pr` | branches, commits, PR etiquette, per-project PR policy, babysitting |
 | `core/docs.md` | block `docs` | audience split, discipline, scratch rules, doc headers |
-| `core/backlog.md` | block `backlog` | the one-line task format and section names |
+| `core/backlog.md` | block `backlog` | the one-line task format, sections, source-of-truth and closing rules |
 | `core/review-gates.md` | block `review-gates` | when the independent review is required; the shared contract |
 | `core/agent-selection.md` | file `docs/development/agent-model-selection.md` | model/effort selection (replaces the two diverged copies) |
 | `core/orchestration.md` | block `orchestration` | pointer + non-negotiables; the full procedure lives in `skills/opc-delegate` |

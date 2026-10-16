@@ -9,7 +9,10 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
 
 1. **Tick the backlog line.** In `docs/backlog.md`, mark `[x]` and append
    `— YYYY-MM-DD`. Leftover work becomes *new* lines under Now/Next/Later —
-   never a scratch file, a review comment, or chat-only notes.
+   never a scratch file, a review comment, or chat-only notes. Solo agent:
+   these edits ride your branch and become real when the PR merges. Under an
+   orchestrator: it validates all lines at the end and lands anything missing
+   separately.
 2. **Where does new content go?** (the placement decision)
    - A rule that must never silently be violated → propose a change to the
      matching fragment in the hub (`standards/`), never a repo-local rule.

@@ -37,3 +37,4 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 - [x] Retrofit gymbloc — #38 merged; standards-sync micro-PRs #39 + #40 (first uses of the carve-out) — 2026-10-16
 - [x] Standards · Standards-sync commit carve-out — micro-PR (review-exempt) or direct where permitted; `opc check` green is the evidence — 2026-10-16
 - [x] Skills v1 — `opc-delegate` + `opc-task-loop` authored in `skills/`, installed machine-wide via the skills CLI — 2026-10-16
+- [x] Standards · Backlog source-of-truth + orchestrator closing duty; both skills refreshed — 2026-10-16
