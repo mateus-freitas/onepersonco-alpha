@@ -1,7 +1,8 @@
 # One Person Company — alpha
 
-Internal control room for my projects: shared agent/engineering standards, project
-skeletons, and the local board that shows what every project is doing.
+Internal control room for my projects: the shared agent/engineering standards,
+the project registry, the cross-harness agent skills, and the local board that
+shows what every project is doing.
 
 Status: scrappy, internal, testing. If this grows into a product, the polished
 version gets the `onepersonco` name — this checkout keeps `-alpha`.
@@ -10,20 +11,113 @@ version gets the `onepersonco` name — this checkout keeps `-alpha`.
 
 | path | what |
 | --- | --- |
-| `standards/` | rule fragments synced into each repo's `AGENTS.md` (git/PR etiquette, docs discipline, backlog format, agent-model selection, platform overlays) |
-| `projects.json` | the project registry — adding a project here makes the board see it |
-| `skeleton/` | template for new projects, extracted from blocos + gymbloc |
-| `board/` | local visual board: scan → index → localhost UI |
+| `standards/` | the rule fragments synced into each repo's `AGENTS.md` (git/PR etiquette, docs discipline, backlog format, orchestration, agent-model selection, platform overlays) |
+| `projects.json` | the project registry — adding a project here is all it takes for the board (and `opc sync`) to see it |
+| `skills/` | cross-harness agent skills (`opc-delegate`, `opc-task-loop`), installed machine-wide via the skills CLI |
+| `board/` | the local visual board: scan → index → localhost UI |
 | `scripts/` | the `opc` CLI: `sync` · `check` · `scan` · `board` (`new` comes with the skeleton) |
-| `skills/` | cross-harness agent skills (`opc-delegate`, `opc-task-loop`); install machine-wide with `npx skills add mateus-freitas/onepersonco-alpha` |
+| `skeleton/` | template for new projects, extracted from blocos + gymbloc (pending) |
 
-Scratch lives *outside* every repo, in the hidden sibling `~/dev/.onepersonco/`
-(see its README). Nothing there is committed anywhere; nothing there is a source
-of truth.
+Machine-local working data — scratch, worktrees, trash — lives *outside* every
+repo in the hidden sibling `~/dev/.onepersonco/` (see its README). Nothing
+there is committed; scratch is safe to delete, worktrees are live checkouts.
 
-## Conventions
+## Getting started — a new machine
 
-- Never hand-edit the managed blocks in a repo's `AGENTS.md`; edit `standards/`
-  and run `opc sync`.
-- Durable knowledge lives in the repos (`docs/internals/`, `rfcs/`, `evidence/`);
-  scratch never graduates by accident.
+The scenario this covers: a fresh computer, the projects already cloned
+(`~/dev/blocos`, `~/dev/gymbloc`, …), and this hub cloned next to them.
+Fifteen minutes, no global installs beyond what npx fetches on demand.
+
+### 1 · Prerequisites
+
+- macOS with `git`, Node ≥ 20 (`node --version`), and `python3` (system is fine)
+- GitHub access set up (`ssh -T git@github.com` greets you; `gh auth status` if
+  you want the CLI) — needed to push, and the skills repo is public
+
+### 2 · Clone the hub beside the projects
+
+```sh
+cd ~/dev
+git clone git@github.com:mateus-freitas/onepersonco-alpha.git
+```
+
+### 3 · Put `opc` on PATH
+
+```sh
+cd ~/dev/onepersonco-alpha
+npm link          # installs the `opc` bin into your Node bin directory
+opc               # prints usage
+```
+
+### 4 · Create the machine-local working data
+
+```sh
+mkdir -p ~/dev/.onepersonco/{shared,trash,worktrees}
+for p in blocos gymbloc onepersonco-alpha; do
+  mkdir -p ~/dev/.onepersonco/$p/{prompts,plans,research,artifacts,archive}
+done
+```
+
+Safety net so scratch never dirties a repo even if a tool writes into one:
+
+```sh
+mkdir -p ~/.config/git
+grep -qxF 'docs/prompts/' ~/.config/git/ignore 2>/dev/null || printf 'docs/prompts/\n.plans/\n' >> ~/.config/git/ignore
+```
+
+### 5 · Point the registry at this machine
+
+Open `projects.json` and make sure every `path` matches where the projects
+actually live; add future projects here too. `"standardized": true` marks the
+projects that have adopted the standards — the ones `opc sync` writes to.
+
+### 6 · Verify
+
+```sh
+opc check         # expect 0 errors; info = pending retrofits, not problems
+opc sync          # expect "up to date" for standardized projects
+opc board         # http://localhost:4770 — reload rescans; click paths to open files
+```
+
+### 7 · Install the agent skills (machine-wide)
+
+```sh
+cd ~              # from $HOME, not inside a repo — inside one it installs project-scope
+npx skills add mateus-freitas/onepersonco-alpha
+```
+
+Installs `opc-delegate` + `opc-task-loop` into `~/.agents/skills/`, linked into
+Claude Code, Codex, OpenCode and friends (npx downloads the CLI on first run).
+After editing a skill in this repo: `npx skills update`.
+
+### 8 · Nothing to install inside the projects
+
+Standardized projects carry managed blocks in `AGENTS.md` (plus a one-line
+`CLAUDE.md` pointer) that `opc sync` writes; never edit them by hand. A project
+that has not adopted the standards yet shows as "pending retrofit" in
+`opc check` and on the board — the retrofit is a guided task (see
+`docs/backlog.md`).
+
+## Daily use
+
+- `opc check` — deterministic health: drift, markers, backlog lines, links
+- `opc board` — the board; rescans on every load
+- `opc sync [project]` — push standards changes into standardized projects
+- `opc scan --snapshot` — refresh the self-contained `board/snapshot.html`
+
+## Working on the hub itself
+
+- **Rules** live in `standards/core/*` (+ `standards/platforms/*` per stack).
+  Change a fragment, run `opc sync onepersonco-alpha`, `opc check`, commit.
+  Other projects pick it up at their next sync — the `git-pr` fragment's
+  standards-sync carve-out explains how those commits travel.
+- **The board** is `board/app.html` + `board/global.css` (the shadcn preset
+  theme; dark by default; every color is a token). No build step, no deps.
+- **The CLI** is `scripts/opc.mjs` — plain Node, stdlib only. Keep it
+  dependency-free; `node --check` + `opc check` before committing.
+- **Skills** live in `skills/<name>/SKILL.md`. Quote frontmatter descriptions
+  that contain a colon. Push, then `npx skills update`; verify with
+  `npx skills list -g`.
+- Never hand-edit a managed block in a project; edit the fragment here and
+  sync. Durable knowledge lives in the repos (`docs/internals/`, RFCs,
+  evidence); scratch never graduates by accident.

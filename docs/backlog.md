@@ -17,6 +17,7 @@ Format: `- [ ] Title — spec: <path> — p0..p3` (spec and priority optional).
 - [ ] P4 · Board write-back (drag to restatus edits the backlog line)
 - [ ] Lifetime · Fold legacy worktrees (`~/dev/agents-worktrees/`, `~/dev/*-wt-*`) into the worktrees root as they finish
 - [ ] P5 · Skeleton extraction + `opc new` for future projects
+- [ ] P5 · `opc bootstrap` — script the README's new-machine steps (scratch dirs, gitignore safety net, registry check)
 
 ## Done (recent)
 
