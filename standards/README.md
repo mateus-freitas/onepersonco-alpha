@@ -1,8 +1,8 @@
 # Standards fragments
 
 Each file here is one rule area, composed into a project's `AGENTS.md` or synced
-as a whole file by `opc sync`. Projects never edit synced content by hand;
-platform-specific content stays outside the managed markers.
+as a whole file by `opc sync`. Projects never edit synced content by hand; a
+project's own platform-specific depth stays outside the managed markers.
 
 Marker convention (first line of every fragment):
 
@@ -10,6 +10,8 @@ Marker convention (first line of every fragment):
   begin/end markers as one section.
 - `<!-- opc-file: <repo path> -->` — synced as the complete file at that path
   (for policies too long to live inside `AGENTS.md`).
+- `<!-- opc-stack: <tokens> -->` — platform fragments only, on the second line:
+  the project `stack` tokens that must all be present for the fragment to apply.
 
 ## Core (drafted, in review)
 
@@ -22,12 +24,17 @@ Marker convention (first line of every fragment):
 | `core/agent-selection.md` | file `docs/development/agent-model-selection.md` | model/effort selection (replaces the two diverged copies) |
 | `core/orchestration.md` | block `orchestration` | orchestrator/worker workflow: briefs in scratch, disjoint ownership, workers never commit, verification duties |
 
+## Platforms
+
+| fragment | applies to | covers |
+| --- | --- | --- |
+| `platforms/swift-ios.md` | stack contains `swift` + `ios` | Xcode toolchain, simulator/device verification, shared-destination rules |
+
 ## Pending
 
 | fragment | lands with |
 | --- | --- |
 | `platforms/flutter.md` · `platforms/ts-firebase.md` | the blocos retrofit |
-| `platforms/swift-ios.md` | the gymbloc retrofit |
 
 `templates/` holds the small stubs agents copy: `backlog.md`, `doc-header.md`,
 `prompt-folder.md`.

@@ -23,6 +23,6 @@ of truth.
 ## Conventions
 
 - Never hand-edit the managed blocks in a repo's `AGENTS.md`; edit `standards/`
-  and run `devkit sync`.
+  and run `opc sync`.
 - Durable knowledge lives in the repos (`docs/internals/`, `rfcs/`, `evidence/`);
   scratch never graduates by accident.

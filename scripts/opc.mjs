@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // opc — the One Person Company CLI (alpha): sync · check · scan · board
 //
-// sync   compose standards/core fragments into standardized projects
+// sync   compose standards fragments (core + matching platforms) into standardized projects
 // check  deterministic health checks for every registered project
 // scan   write board/data.json (+ --snapshot for a self-contained page)
 // board  serve the local board; /data.json rescans on every load
@@ -15,7 +15,8 @@ import { fileURLToPath } from "node:url";
 
 const HUB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registry = JSON.parse(fs.readFileSync(path.join(HUB, "projects.json"), "utf8"));
-const standardsDir = path.join(HUB, "standards", "core");
+const coreDir = path.join(HUB, "standards", "core");
+const platformsDir = path.join(HUB, "standards", "platforms");
 const boardDir = path.join(HUB, "board");
 
 const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
@@ -23,17 +24,42 @@ const SECTIONS = ["Now", "Next", "Later", "Done"];
 
 // ---------------------------------------------------------------- sync
 
-function loadFragments() {
+function readFragments(dir, label) {
+  if (!fs.existsSync(dir)) return [];
   return fs
-    .readdirSync(standardsDir)
+    .readdirSync(dir)
     .filter((f) => f.endsWith(".md"))
     .sort()
     .map((file) => {
-      const raw = fs.readFileSync(path.join(standardsDir, file), "utf8");
+      const raw = fs.readFileSync(path.join(dir, file), "utf8");
       const m = raw.match(/^<!-- opc-(block|file): ([^\s]+) -->\n/);
-      if (!m) throw new Error(`standards/core/${file}: missing first-line opc marker`);
-      return { file, kind: m[1], target: m[2], body: raw.slice(m[0].length).replace(/^\n+/, "").replace(/\n*$/, "\n") };
+      if (!m) throw new Error(`standards/${label}/${file}: missing first-line opc marker`);
+      let rest = raw.slice(m[0].length);
+      const stackM = rest.match(/^<!-- opc-stack: ([^>]+) -->\n/);
+      if (stackM) rest = rest.slice(stackM[0].length);
+      return {
+        file,
+        kind: m[1],
+        target: m[2],
+        stack: stackM ? stackM[1].trim().split(/\s+/).filter(Boolean) : [],
+        body: rest.replace(/^\n+/, "").replace(/\n*$/, "\n"),
+      };
     });
+}
+
+function loadFragments() {
+  return readFragments(coreDir, "core");
+}
+
+// core fragments always apply; a platform fragment applies when every token of
+// its second-line `opc-stack` marker is present in the project's stack
+function loadProjectFragments(project) {
+  const stack = new Set(project.stack || []);
+  const platform = readFragments(platformsDir, "platforms").map((f) => {
+    if (!f.stack.length) throw new Error(`standards/platforms/${f.file}: missing second-line opc-stack marker`);
+    return f;
+  });
+  return [...loadFragments(), ...platform.filter((f) => f.stack.every((token) => stack.has(token)))];
 }
 
 function composeBlock(projectDir, name, body) {
@@ -87,7 +113,6 @@ function syncFile(projectDir, rel, body, fragmentFile) {
 }
 
 function cmdSync() {
-  const fragments = loadFragments();
   let changes = 0;
   for (const project of registry.projects) {
     if (!project.standardized) {
@@ -96,6 +121,7 @@ function cmdSync() {
     }
     const dir = expand(project.path);
     if (!fs.existsSync(dir)) throw new Error(`${project.id}: path does not exist: ${dir}`);
+    const fragments = loadProjectFragments(project);
     const updated = [];
     const missing = [];
     for (const f of fragments) {
@@ -415,12 +441,11 @@ function checkProject(p, fragments) {
 }
 
 function checkAll() {
-  const fragments = loadFragments();
   const checkedAt = new Date().toISOString();
   const findings = [];
   const perProject = new Map();
   for (const p of registry.projects) {
-    const list = checkProject(p, fragments);
+    const list = checkProject(p, loadProjectFragments(p));
     findings.push(...list);
     perProject.set(p.id, healthOf(list, checkedAt));
   }
