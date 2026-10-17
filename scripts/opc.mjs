@@ -5,7 +5,7 @@
 // check  deterministic health checks for every registered project
 // scan   write console/data.json (+ --snapshot for a self-contained page)
 // console serve the local console; /data.json rescans on every load, and
-//         /task/move + /task/cancel edit a backlog through byte-guarded writes
+//         /task/add + /task/move + /task/cancel edit backlogs behind guards
 
 import fs from "node:fs";
 import path from "node:path";
@@ -914,15 +914,17 @@ function cmdCheck(args) {
 
 // ---------------------------------------------------------------- console
 
-// The console is read-only except for two local actions: moving a task line
-// between sections (or repositioning it inside one) and canceling it. Both
-// name the project, the section, the item index and the block exactly as the
-// last scan saw it; the server resolves the file from the registry (never from
-// client paths), re-reads it and edits raw lines, so untouched bytes stay
-// untouched. A move may also name the item it lands above (`before`, null =
-// end of the section); every named block is verified byte-for-byte. A block
-// that no longer matches the file — an agent or another window wrote first —
-// answers 409.
+// The console is read-only except for three local actions: adding a task,
+// moving a task line between sections (or repositioning it inside one) and
+// canceling it. Every write names the project and the section it touches;
+// moves and cancels also name the item index and the block exactly as the
+// last scan saw it, and a move may name the item it lands above (`before`,
+// null = end of the section). Every named block is verified byte-for-byte; a
+// block that no longer matches the file — an agent or another window wrote
+// first — answers 409. The server resolves the file from the registry (never
+// from client paths), re-reads it and edits raw lines, so untouched bytes
+// stay untouched. Additions resolve `spec:` and `prompt:` exactly like
+// `opc check` does, so a task the console accepts never breaks the check.
 
 function backlogFile(project) {
   return path.join(expand(project.path), project.docs || "docs", "backlog.md");
@@ -1055,25 +1057,33 @@ async function cmdConsole(args) {
     };
     if (!isLoopback(req)) { res.writeHead(403); return res.end("localhost only"); }
 
-    // ---- task writes: move between sections / cancel a task
-    if (req.method === "POST" && (url.pathname === "/task/move" || url.pathname === "/task/cancel")) {
+    // ---- task writes: add a task, move or reposition it, cancel it
+    if (req.method === "POST" && (url.pathname === "/task/add" || url.pathname === "/task/move" || url.pathname === "/task/cancel")) {
       const origin = req.headers.origin;
       if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin))
         return sendJson(403, { ok: false, error: "cross-origin write refused" });
       let body = null;
       try { body = JSON.parse(await readBody(req)); } catch { /* answered below */ }
       const move = url.pathname === "/task/move";
+      const add = url.pathname === "/task/add";
       const before = move ? body && body.before : undefined;
-      const bad = !body || typeof body.project !== "string" || !SECTIONS.includes(body.section) ||
-        !Number.isInteger(body.index) || body.index < 0 ||
-        !Array.isArray(body.block) || !body.block.length ||
-        body.block.some((l) => typeof l !== "string" || l.includes("\n")) ||
-        (move && (!SECTIONS.includes(body.to) ||
-          (before !== undefined && before !== null && (
-            typeof before !== "object" ||
-            !Number.isInteger(before.index) || before.index < 0 ||
-            !Array.isArray(before.block) || !before.block.length ||
-            before.block.some((l) => typeof l !== "string" || l.includes("\n"))))));
+      const bad = !body || typeof body.project !== "string" ||
+        (add
+          ? !SECTIONS.includes(body.section) || typeof body.title !== "string" ||
+            (body.priority != null && !/^[pP][0-3]$/.test(body.priority)) ||
+            (body.spec != null && (typeof body.spec !== "string" || /\s/.test(body.spec))) ||
+            (body.prompt != null && (typeof body.prompt !== "string" || /\s/.test(body.prompt))) ||
+            (body.desc != null && typeof body.desc !== "string")
+          : !SECTIONS.includes(body.section) ||
+            !Number.isInteger(body.index) || body.index < 0 ||
+            !Array.isArray(body.block) || !body.block.length ||
+            body.block.some((l) => typeof l !== "string" || l.includes("\n")) ||
+            (move && (!SECTIONS.includes(body.to) ||
+              (before !== undefined && before !== null && (
+                typeof before !== "object" ||
+                !Number.isInteger(before.index) || before.index < 0 ||
+                !Array.isArray(before.block) || !before.block.length ||
+                before.block.some((l) => typeof l !== "string" || l.includes("\n")))))));
       if (bad) return sendJson(400, { ok: false, error: "bad request shape" });
       const project = registry.projects.find((p) => p.id === body.project);
       if (!project) return sendJson(404, { ok: false, error: `unknown project: ${body.project}` });
@@ -1084,6 +1094,34 @@ async function cmdConsole(args) {
       const endsNL = text.endsWith("\n");
       const lines = text.split("\n");
       if (endsNL) lines.pop();
+
+      // Adding: compose the line in the backlog format, resolve `spec:` and
+      // `prompt:` exactly like opc check does, and put the task on top of its
+      // section (drag it anywhere from the board).
+      if (add) {
+        const title = body.title.trim();
+        if (!title || title.includes("\n") || /\s+—\s+(spec|prompt):\s/.test(title))
+          return sendJson(400, { ok: false, error: "title must be a single line without `— spec:` / `— prompt:` markers" });
+        if (body.spec) {
+          const target = body.spec.startsWith("~/") ? expand(body.spec) : path.resolve(expand(project.path), body.spec);
+          if (!fs.existsSync(target)) return sendJson(400, { ok: false, error: `spec does not resolve: ${body.spec}` });
+        }
+        if (body.prompt && !resolvePrompt(project.id, body.prompt))
+          return sendJson(400, { ok: false, error: `prompt does not resolve: ${body.prompt}` });
+        let line = `- [ ] ${title}`;
+        if (body.spec) line += ` — spec: ${body.spec}`;
+        if (body.prompt) line += ` — prompt: ${body.prompt}`;
+        if (body.priority) line += ` — ${body.priority.toLowerCase()}`;
+        if (body.section === "Done") line = toDone(line);
+        const block = [line, ...String(body.desc || "").split("\n")
+          .map((d) => d.trim().replace(/^(?:d|desc):\s*/i, "")).filter(Boolean)
+          .map((d) => `  D: ${d}`)];
+        const inserted = insertItem(lines, body.section, 0, block);
+        if (inserted === false) return sendJson(409, { ok: false, error: `backlog has no "## ${body.section}" section` });
+        fs.writeFileSync(file, lines.join("\n") + (endsNL ? "\n" : ""));
+        return sendJson(200, { ok: true, at: { section: body.section, index: inserted }, data: await freshScan() });
+      }
+
       const found = locateTask(lines, body.section, body.index);
       const same = found && found.end - found.start + 1 === body.block.length &&
         body.block.every((l, i) => l === lines[found.start + i]);

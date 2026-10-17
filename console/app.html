@@ -108,6 +108,30 @@
   .md hr{border:none;border-top:1px solid var(--border);margin:10px 0}
   .md a{color:inherit}
   .td-foot{margin-top:auto;border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--muted-foreground);display:flex;gap:10px;flex-wrap:wrap}
+  /* new task dialog — the drawer's flat language, centered */
+  #new-wrap{position:fixed;inset:0;z-index:50;display:flex;justify-content:center;align-items:flex-start;padding:11vh 16px 16px}
+  #new-wrap[hidden]{display:none}
+  #new-backdrop{position:absolute;inset:0;background:rgb(0 0 0 / .35);opacity:0;transition:opacity .15s}
+  .dark #new-backdrop{background:rgb(0 0 0 / .55)}
+  #new-panel{position:relative;width:min(470px,94vw);max-height:78vh;overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px 16px;display:flex;flex-direction:column;gap:11px;transform:translateY(-8px);opacity:0;transition:transform .15s,opacity .15s}
+  #new-wrap.on #new-backdrop{opacity:1}
+  #new-wrap.on #new-panel{transform:none;opacity:1}
+  .nf{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .nf-row{display:flex;gap:8px}
+  .nf-row .nf{flex:1 1 0}
+  .nf input,.nf select,.nf textarea{font:inherit;font-size:12px;color:var(--foreground);background:var(--background);border:1px solid var(--border);border-radius:var(--radius);padding:6px 8px;min-width:0;width:100%}
+  .nf-title input{font-size:13px;padding:8px 9px}
+  .nf textarea{resize:vertical;min-height:36px;line-height:1.45}
+  .nf input:focus,.nf select:focus,.nf textarea:focus{border-color:var(--ring)}
+  .nf .hd{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground)}
+  .nf-error{font-size:11.5px;color:var(--destructive);line-height:1.45}
+  .nf-error:empty{display:none}
+  .nf-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:2px}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+  .btn.primary:hover{background:var(--primary);color:var(--primary-foreground);opacity:.88}
+  .btn[disabled]{opacity:.45;cursor:default;pointer-events:none}
+  .col .hd .add{margin-left:auto;background:none;border:none;color:var(--muted-foreground);cursor:pointer;font:inherit;font-size:13px;line-height:1;padding:0 1px}
+  .col .hd .add:hover{color:var(--foreground)}
 </style>
 </head>
 <body>
@@ -116,6 +140,7 @@
     <h1>One Person Company <span class="pill">alpha</span></h1>
     <span class="sub" id="gen"></span>
     <span class="right">
+      <button class="btn primary" id="task-new" style="display:none" title="Create a task in a project backlog">+ new task</button>
       <button class="btn" id="theme" title="Toggle light / dark">◐ theme</button>
       <button class="btn" id="rescan" style="display:none">rescan</button>
     </span>
@@ -128,6 +153,35 @@
 <div id="task-wrap" hidden>
   <div id="task-backdrop"></div>
   <aside id="task-panel" role="dialog" aria-modal="true" aria-label="Task detail"></aside>
+</div>
+<div id="new-wrap" hidden>
+  <div id="new-backdrop"></div>
+  <form id="new-panel" role="dialog" aria-modal="true" aria-label="New task">
+    <div class="td-head">
+      <div class="td-crumb">new task</div>
+      <button type="button" class="btn" id="new-close" title="Close (Esc)">✕</button>
+    </div>
+    <label class="nf nf-title"><span class="hd">Title</span>
+      <input id="nf-title" autocomplete="off" spellcheck="false" placeholder="Short, stable title — it becomes the slug"></label>
+    <div class="nf-row">
+      <label class="nf"><span class="hd">Project</span><select id="nf-project"></select></label>
+      <label class="nf"><span class="hd">Column</span><select id="nf-section">
+        <option>Now</option><option>Next</option><option>Later</option><option>Done</option></select></label>
+      <label class="nf"><span class="hd">Priority</span><select id="nf-priority">
+        <option value="">—</option><option>p0</option><option>p1</option><option>p2</option><option>p3</option></select></label>
+    </div>
+    <label class="nf"><span class="hd">Description</span>
+      <textarea id="nf-desc" rows="2" placeholder="optional — each line becomes a D: line"></textarea></label>
+    <div class="nf-row">
+      <label class="nf"><span class="hd">Spec</span><input id="nf-spec" autocomplete="off" placeholder="docs/… (optional)"></label>
+      <label class="nf"><span class="hd">Prompt</span><input id="nf-prompt" autocomplete="off" placeholder="prompts/… (optional)"></label>
+    </div>
+    <div class="nf-error" id="nf-error"></div>
+    <div class="nf-actions">
+      <button type="button" class="btn" id="new-cancel">cancel</button>
+      <button type="submit" class="btn primary" id="new-create">create task</button>
+    </div>
+  </form>
 </div>
 <!--__DATA__-->
 <script>
@@ -242,7 +296,8 @@ function renderBoard() {
         (i.desc ? '<div class="d">' + esc(i.desc) + "</div>" : "") +
         '<div class="meta">' + meta + "</div></div>";
     }).join("") : '<div class="empty">—</div>';
-    return '<div class="col" data-section="' + s + '"><div class="hd">' + s + " <em>" + items.length + "</em></div>" + cards + "</div>";
+    const addBtn = LIVE ? '<button class="add" data-add-section="' + s + '" title="new task in ' + s + '">+</button>' : "";
+    return '<div class="col" data-section="' + s + '"><div class="hd">' + s + " <em>" + items.length + "</em>" + addBtn + "</div>" + cards + "</div>";
   }).join("");
   return healthBanner + banner + '<div class="cols">' + cols + "</div>";
 }
@@ -663,6 +718,79 @@ document.addEventListener("drop", (e) => {
   moveTask(key, to, q < remaining.length ? remaining[q] : null);
 });
 
+// ---------------------------------------------------------------- new task
+
+// The dialog mirrors the board's filters (the active project chip preselects
+// the project) and writes through the same guarded path: the server composes
+// the backlog line, resolves spec:/prompt: like `opc check` does, and returns
+// a fresh scan. New tasks land on top of their section — drag from there.
+let newTimer = null;
+const nfErr = () => document.getElementById("nf-error");
+
+function openNew(preSection) {
+  if (!LIVE || !DATA) return;
+  const projects = DATA.projects.filter((p) => p.backlog);
+  const sel = $("#nf-project");
+  sel.innerHTML = '<option value="" disabled>choose…</option>' +
+    projects.map((p) => '<option value="' + esc(p.id) + '">' + esc(p.id) + "</option>").join("");
+  sel.value = state.project !== "all" && projects.some((p) => p.id === state.project) ? state.project
+    : projects.length === 1 ? projects[0].id
+    : "";
+  $("#nf-section").value = preSection || "Now";
+  $("#nf-priority").value = "";
+  $("#nf-title").value = "";
+  $("#nf-desc").value = "";
+  $("#nf-spec").value = "";
+  $("#nf-prompt").value = "";
+  nfErr().textContent = "";
+  clearTimeout(newTimer);
+  const w = document.getElementById("new-wrap");
+  w.hidden = false;
+  requestAnimationFrame(() => w.classList.add("on"));
+  $("#nf-title").focus();
+}
+
+function closeNew(immediate) {
+  const w = document.getElementById("new-wrap");
+  if (!w || w.hidden) return;
+  clearTimeout(newTimer);
+  w.classList.remove("on");
+  if (immediate) w.hidden = true;
+  else newTimer = setTimeout(() => { w.hidden = true; }, 160);
+}
+
+async function createTask() {
+  if (writing || !LIVE) return;
+  const title = $("#nf-title").value.trim();
+  const pid = $("#nf-project").value;
+  if (!title) { nfErr().textContent = "a title is required"; $("#nf-title").focus(); return; }
+  if (!pid) { nfErr().textContent = "choose a project"; $("#nf-project").focus(); return; }
+  const payload = {
+    project: pid,
+    section: $("#nf-section").value,
+    title,
+    priority: $("#nf-priority").value || null,
+    spec: $("#nf-spec").value.trim() || null,
+    prompt: $("#nf-prompt").value.trim() || null,
+    desc: $("#nf-desc").value.trim() || null,
+  };
+  writing = true;
+  $("#new-create").disabled = true;
+  try {
+    const out = await postJSON("/task/add", payload);
+    closeNew();
+    if (out.data) applyData(out.data);
+    toast("added to " + payload.section.toLowerCase());
+  } catch (err) {
+    nfErr().textContent = err.message;
+  } finally {
+    writing = false;
+    $("#new-create").disabled = false;
+  }
+}
+
+$("#new-panel").addEventListener("submit", (e) => { e.preventDefault(); createTask(); });
+
 function renderFoot() {
   $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc console` for the live console · " : "live · data rescans on every load · click paths to open locally · ") +
     filtered().map((p) => p.id + (p.branch ? "@" + p.branch : "") + (p.dirty ? " ✎" + p.dirty : "")).join("  ·  ");
@@ -680,6 +808,7 @@ function render() {
   $("#view").innerHTML = views[state.tab]();
   renderFoot();
   document.getElementById("rescan").style.display = window.__DATA__ ? "none" : "";
+  document.getElementById("task-new").style.display = window.__DATA__ ? "none" : "";
 }
 
 document.addEventListener("click", (e) => {
@@ -693,6 +822,10 @@ document.addEventListener("click", (e) => {
   }
   if (e.target.id === "task-backdrop" || e.target.id === "task-close") { closeTask(); return; }
   if (e.target.id === "task-cancel") { cancelTask(); return; }
+  if (e.target.id === "task-new") { openNew(); return; }
+  if (e.target.id === "new-backdrop" || e.target.id === "new-close" || e.target.id === "new-cancel") { closeNew(); return; }
+  const addBtn = e.target.closest("[data-add-section]");
+  if (addBtn) { openNew(addBtn.dataset.addSection); return; }
   const cardEl = e.target.closest("[data-task]");
   if (cardEl) { openTask(cardEl.dataset.task); return; }
   const chipEl = e.target.closest("[data-project]");
@@ -704,7 +837,10 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeTask();
+  if (e.key === "Escape") {
+    if (!document.getElementById("new-wrap").hidden) closeNew();
+    else closeTask();
+  }
 });
 
 async function load() {
