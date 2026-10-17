@@ -4,7 +4,8 @@
 // sync   compose standards fragments (core + matching platforms) into standardized projects
 // check  deterministic health checks for every registered project
 // scan   write console/data.json (+ --snapshot for a self-contained page)
-// console serve the local console; /data.json rescans on every load
+// console serve the local console; /data.json rescans on every load, and
+//         /task/move + /task/cancel edit a backlog through byte-guarded writes
 
 import fs from "node:fs";
 import path from "node:path";
@@ -21,6 +22,10 @@ const consoleDir = path.join(HUB, "console");
 
 const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
 const SECTIONS = ["Now", "Next", "Later", "Done"];
+// Backlog line grammar, shared by parseBacklog (read) and the console write
+// endpoints — both must agree on where a task line and its `D:` lines end.
+const TASK_LINE_RE = /^-\s+\[( |x|X)\]\s+(.+)$/;
+const DESC_LINE_RE = /^\s+(?:d|desc):\s*(.+?)\s*$/i;
 
 // ---------------------------------------------------------------- target
 
@@ -447,7 +452,7 @@ function parseBacklog(file) {
       return;
     }
     if (!current) return;
-    const item = line.match(/^-\s+\[( |x|X)\]\s+(.+)$/);
+    const item = line.match(TASK_LINE_RE);
     if (item) {
       let rest = item[2].trim();
       let spec = null;
@@ -471,15 +476,17 @@ function parseBacklog(file) {
         date,
         checked: item[1].toLowerCase() === "x",
         line: i + 1,
+        block: [line], // raw task line + D: lines, byte-exact for write-back guards
       };
       sections[current].push(last);
       return;
     }
     // an indented `D:`/`desc:` line right under an item is its description —
     // free text, so it may safely contain em dashes and anything else
-    const desc = last && line.match(/^\s+(?:d|desc):\s*(.+?)\s*$/i);
+    const desc = last && line.match(DESC_LINE_RE);
     if (desc) {
       last.desc = last.desc ? `${last.desc} ${desc[1]}` : desc[1];
+      last.block.push(line);
       return;
     }
     last = null;
@@ -907,6 +914,134 @@ function cmdCheck(args) {
 
 // ---------------------------------------------------------------- console
 
+// The console is read-only except for two local actions: moving a task line
+// between sections (or repositioning it inside one) and canceling it. Both
+// name the project, the section, the item index and the block exactly as the
+// last scan saw it; the server resolves the file from the registry (never from
+// client paths), re-reads it and edits raw lines, so untouched bytes stay
+// untouched. A move may also name the item it lands above (`before`, null =
+// end of the section); every named block is verified byte-for-byte. A block
+// that no longer matches the file — an agent or another window wrote first —
+// answers 409.
+
+function backlogFile(project) {
+  return path.join(expand(project.path), project.docs || "docs", "backlog.md");
+}
+
+// Block extent of task `index` in `section`: same walk as parseBacklog.
+// Returns { start, end } as inclusive line indices, or null.
+function locateTask(lines, section, index) {
+  let current = null;
+  let n = 0; // item position within `section`, walked exactly like parseBacklog
+  for (let i = 0; i < lines.length; i++) {
+    const h = lines[i].match(/^##\s+(.+)$/);
+    if (h) {
+      current = SECTIONS.find((s) => h[1].trim().toLowerCase().startsWith(s.toLowerCase())) || null;
+      continue;
+    }
+    if (current !== section || !TASK_LINE_RE.test(lines[i])) continue;
+    if (n++ !== index) continue;
+    let end = i;
+    while (end + 1 < lines.length && DESC_LINE_RE.test(lines[end + 1])) end++;
+    return { start: i, end };
+  }
+  return null;
+}
+
+// Insert a block right after the target `## <section>` heading, above any
+// existing item; keeps the blank line after the heading and one before the
+// next heading when the section was empty. Only used for empty sections —
+// insertItem covers every other position.
+function insertTop(lines, section, block) {
+  let h = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^##\s+(.+)$/);
+    if (!m) continue;
+    if (SECTIONS.find((s) => m[1].trim().toLowerCase().startsWith(s.toLowerCase())) === section) { h = i; break; }
+  }
+  if (h === -1) return false;
+  let at = h + 1;
+  while (at < lines.length && lines[at].trim() === "") at++;
+  const gap = at < lines.length && /^##\s/.test(lines[at]) ? [""] : [];
+  lines.splice(at, 0, ...block, ...gap);
+  return true;
+}
+
+// Insert a block at item position `k` within `section`: 0 puts it above the
+// first item, k ≥ item count appends after the last item. Items are contiguous
+// in a section (no blank lines between them), so a middle insert lands right
+// below item k-1's `D:` lines. Returns the new item's index, or false when
+// the section heading is missing.
+function insertItem(lines, section, k, block) {
+  const starts = [];
+  let current = null;
+  for (let i = 0; i < lines.length; i++) {
+    const h = lines[i].match(/^##\s+(.+)$/);
+    if (h) {
+      current = SECTIONS.find((s) => h[1].trim().toLowerCase().startsWith(s.toLowerCase())) || null;
+      continue;
+    }
+    if (current === section && TASK_LINE_RE.test(lines[i])) starts.push(i);
+  }
+  if (!starts.length) return insertTop(lines, section, block) ? 0 : false;
+  if (k <= 0) { lines.splice(starts[0], 0, ...block); return 0; }
+  if (k >= starts.length) {
+    let end = starts[starts.length - 1];
+    while (end + 1 < lines.length && DESC_LINE_RE.test(lines[end + 1])) end++;
+    lines.splice(end + 1, 0, ...block);
+    return starts.length;
+  }
+  lines.splice(starts[k], 0, ...block);
+  return k;
+}
+
+// Entering Done ticks the box and stamps today when the trailing date is
+// absent; leaving Done unticks and strips only the trailing date field.
+// Everything else on the line stays byte-identical.
+function toDone(line) {
+  const out = line.replace(/^-\s+\[( |x|X)\]/, "- [x]");
+  return /\s+—\s+\d{4}-\d{2}-\d{2}\s*$/.test(out) ? out : out.replace(/\s+$/, "") + " — " + todayISO();
+}
+
+function fromDone(line) {
+  return line
+    .replace(/^-\s+\[( |x|X)\]/, "- [ ]")
+    .replace(/\s+—\s+\d{4}-\d{2}-\d{2}\s*$/, "");
+}
+
+function todayISO() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Scan like /data.json does, and persist: every console write refreshes
+// console/data.json so line numbers and sections stay correct everywhere.
+async function freshScan() {
+  const data = await scanAll();
+  fs.writeFileSync(path.join(consoleDir, "data.json"), JSON.stringify(data, null, 2));
+  return data;
+}
+
+function readBody(req, limit = 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > limit) { reject(new Error("request body too large")); req.destroy(); return; }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
+}
+
+const isLoopback = (req) => {
+  const ip = req.socket.remoteAddress || "";
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+};
+
 async function cmdConsole(args) {
   const portIdx = args.indexOf("--port");
   const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 4770;
@@ -914,13 +1049,96 @@ async function cmdConsole(args) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const name = url.pathname === "/" ? "app.html" : url.pathname.replace(/^\/+/, "");
+    const sendJson = (status, payload) => {
+      res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(payload));
+    };
+    if (!isLoopback(req)) { res.writeHead(403); return res.end("localhost only"); }
+
+    // ---- task writes: move between sections / cancel a task
+    if (req.method === "POST" && (url.pathname === "/task/move" || url.pathname === "/task/cancel")) {
+      const origin = req.headers.origin;
+      if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin))
+        return sendJson(403, { ok: false, error: "cross-origin write refused" });
+      let body = null;
+      try { body = JSON.parse(await readBody(req)); } catch { /* answered below */ }
+      const move = url.pathname === "/task/move";
+      const before = move ? body && body.before : undefined;
+      const bad = !body || typeof body.project !== "string" || !SECTIONS.includes(body.section) ||
+        !Number.isInteger(body.index) || body.index < 0 ||
+        !Array.isArray(body.block) || !body.block.length ||
+        body.block.some((l) => typeof l !== "string" || l.includes("\n")) ||
+        (move && (!SECTIONS.includes(body.to) ||
+          (before !== undefined && before !== null && (
+            typeof before !== "object" ||
+            !Number.isInteger(before.index) || before.index < 0 ||
+            !Array.isArray(before.block) || !before.block.length ||
+            before.block.some((l) => typeof l !== "string" || l.includes("\n"))))));
+      if (bad) return sendJson(400, { ok: false, error: "bad request shape" });
+      const project = registry.projects.find((p) => p.id === body.project);
+      if (!project) return sendJson(404, { ok: false, error: `unknown project: ${body.project}` });
+      const file = backlogFile(project);
+      if (!fs.existsSync(file)) return sendJson(404, { ok: false, error: `${project.id}: no docs/backlog.md` });
+
+      const text = fs.readFileSync(file, "utf8");
+      const endsNL = text.endsWith("\n");
+      const lines = text.split("\n");
+      if (endsNL) lines.pop();
+      const found = locateTask(lines, body.section, body.index);
+      const same = found && found.end - found.start + 1 === body.block.length &&
+        body.block.every((l, i) => l === lines[found.start + i]);
+      if (!same) return sendJson(409, { ok: false, error: "backlog changed" });
+
+      // Position: `before` names the item the block lands above (same project,
+      // same section), null appends to the section, omitted keeps the original
+      // top insertion. The anchor is verified like the moved block itself.
+      let anchor = null;
+      if (move) {
+        if (before !== undefined && before !== null) {
+          const foundA = locateTask(lines, body.to, before.index);
+          const sameA = foundA && foundA.end - foundA.start + 1 === before.block.length &&
+            before.block.every((l, i) => l === lines[foundA.start + i]);
+          if (!sameA) return sendJson(409, { ok: false, error: "backlog changed" });
+          anchor = before.index;
+        }
+        // dropping the item back into its own slot is a no-op
+        if (body.to === body.section && (anchor === body.index || anchor === body.index + 1))
+          return sendJson(200, { ok: true, noop: true });
+      }
+
+      const block = body.block.slice();
+      if (move) {
+        if (body.to === "Done") block[0] = toDone(block[0]);
+        else if (body.section === "Done") block[0] = fromDone(block[0]);
+      }
+      lines.splice(found.start, found.end - found.start + 1);
+      // a block that was the only item leaves a doubled blank around the
+      // removed spot — collapse one so empty sections keep the file's style
+      if (lines[found.start - 1] !== undefined && lines[found.start - 1].trim() === "" &&
+          lines[found.start] !== undefined && lines[found.start].trim() === "")
+        lines.splice(found.start, 1);
+
+      let at = null;
+      if (move) {
+        let k = 0; // stale client without `before`: the original top insertion
+        if (before === null) k = Number.MAX_SAFE_INTEGER; // append after the last item
+        else if (before !== undefined) k = body.to === body.section && anchor > body.index ? anchor - 1 : anchor;
+        const inserted = insertItem(lines, body.to, k, block);
+        if (inserted === false)
+          return sendJson(409, { ok: false, error: `backlog has no "## ${body.to}" section` });
+        at = { section: body.to, index: inserted };
+      }
+      fs.writeFileSync(file, lines.join("\n") + (endsNL ? "\n" : ""));
+      return sendJson(200, { ok: true, at, data: await freshScan() });
+    }
+    if (req.method !== "GET") { res.writeHead(405); return res.end("method not allowed"); }
+
     if (name === "app.html" || name === "index.html") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       return res.end(fs.readFileSync(path.join(consoleDir, "app.html"), "utf8"));
     }
     if (name === "data.json") {
-      const data = await scanAll();
-      fs.writeFileSync(path.join(consoleDir, "data.json"), JSON.stringify(data, null, 2));
+      const data = await freshScan();
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       return res.end(JSON.stringify(data));
     }

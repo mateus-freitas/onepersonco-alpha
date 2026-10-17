@@ -19,6 +19,8 @@
   header .right{margin-left:auto;display:flex;gap:6px;align-items:center}
   .btn{font:inherit;font-size:11.5px;padding:5px 10px;border:1px solid var(--border);background:transparent;color:var(--foreground);border-radius:var(--radius);cursor:pointer}
   .btn:hover{background:var(--accent);color:var(--accent-foreground)}
+  .btn.danger{color:var(--destructive);border-color:color-mix(in srgb, var(--destructive) 45%, transparent)}
+  .btn.danger:hover{background:var(--destructive);color:var(--background);border-color:var(--destructive)}
   .chips{display:flex;gap:6px;flex-wrap:wrap}
   .chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;color:var(--muted-foreground);cursor:pointer;background:transparent}
   .chip:hover{background:var(--accent);color:var(--accent-foreground)}
@@ -35,13 +37,22 @@
   .n.danger{color:var(--destructive)}
   .banner{border:1px dashed var(--border);border-radius:var(--radius);padding:10px 14px;color:var(--muted-foreground);font-size:12px}
   .banner b{color:var(--foreground)}
-  .cols{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-  @media (max-width:680px){.cols{grid-template-columns:repeat(2,1fr)}}
-  .col{border:1px solid var(--border);border-radius:var(--radius);padding:10px;display:flex;flex-direction:column;gap:8px;min-height:80px;background:var(--card)}
+  .cols{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,.8fr);gap:10px}
+  @media (max-width:680px){.cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .col{border:1px solid var(--border);border-radius:var(--radius);padding:10px;display:flex;flex-direction:column;gap:8px;min-height:80px;min-width:0;background:var(--card)}
+  .col.drag-over{border-color:var(--ring);background:var(--accent)}
   .col .hd{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground);display:flex;gap:6px;align-items:center}
   .col .hd em{font-style:normal;font-weight:400;opacity:.7}
-  .card{border:1px solid var(--border);border-radius:var(--radius);padding:9px 10px;background:var(--background);font-size:12px}
+  .card{border:1px solid var(--border);border-radius:var(--radius);padding:9px 10px;background:var(--background);font-size:12px;min-width:0;overflow-wrap:anywhere}
   .card .t{line-height:1.4}
+  .card.task[draggable="true"]{cursor:grab}
+  .card.task[draggable="true"]:active{cursor:grabbing}
+  .card.dragging{opacity:.45}
+  .card.drop-before,.card.drop-after{position:relative}
+  .card.drop-before::before,.card.drop-after::after{content:"";position:absolute;left:-3px;right:-3px;height:2px;background:var(--ring)}
+  .card.drop-before::before{top:-5px}
+  .card.drop-after::after{bottom:-5px}
+  .lref{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:9.5px;font-weight:600;color:var(--muted-foreground);background:var(--secondary);border-radius:var(--radius);padding:1px 5px;margin-right:5px;vertical-align:1px;white-space:nowrap;cursor:default}
   .card .meta{display:flex;gap:6px;align-items:center;color:var(--muted-foreground);font-size:10.5px;margin-top:6px;flex-wrap:wrap}
   .card.done{opacity:.55}
   .card.done .t{text-decoration:line-through}
@@ -122,7 +133,8 @@
 <script>
 const $ = (s, el = document) => el.querySelector(s);
 let DATA = window.__DATA__ || null;
-const state = { tab: "board", project: "all" };
+const state = { tab: "board", project: "all", openKey: null };
+let writing = false; // one backlog write at a time
 const pcls = new Map();
 const pclass = (id) => { if (!pcls.has(id)) pcls.set(id, ["pa", "pb", "pc", "pd", "pe"][pcls.size % 5]); return pcls.get(id); };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -136,6 +148,28 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("on"), 1600);
 }
+// after a write the server returns a fresh scan — the same shape as
+// /data.json — so sections, indexes, line refs and the drawer stay correct
+function applyData(data) {
+  DATA = data;
+  pcls.clear();
+  render();
+}
+async function postJSON(pathname, payload) {
+  const r = await fetch(pathname, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  let out = null;
+  try { out = await r.json(); } catch { /* non-json error body */ }
+  if (!r.ok) {
+    const err = new Error((out && out.error) || "http " + r.status);
+    err.status = r.status;
+    throw err;
+  }
+  return out || {};
+}
 function absPath(baseDir, rel) {
   if (!rel) return null;
   if (rel.startsWith("~/")) return DATA.home ? DATA.home + rel.slice(1) : null;
@@ -148,6 +182,7 @@ function opLink(text, path, tip) {
 
 const filtered = () => state.project === "all" ? DATA.projects : DATA.projects.filter((p) => p.id === state.project);
 const backlogOf = (p) => p.backlog || { Now: [], Next: [], Later: [], Done: [] };
+const backlogRel = (i) => i.file || "docs/backlog.md"; // tooltip for the L<n> ref
 const docsOf = (p) => p.docs || [];
 const allDocs = () => filtered().flatMap((p) => docsOf(p).map((d) => ({ ...d, project: p.id, projectPath: p.path })));
 const sessionsOf = (p) => p.promptSessions || [];
@@ -201,11 +236,13 @@ function renderBoard() {
         wt ? '<span class="tag" title="' + esc(wt.branch || wt.path || "") + '">worktree</span>' : "",
         i.date ? '<span class="tag">' + esc(i.date) + "</span>" : "",
       ].filter(Boolean).join(" ");
-      return '<div class="card task' + (i.checked ? " done" : "") + '" data-task="' + esc(i.key) + '"><div class="t">' + esc(i.title) + "</div>" +
+      const lref = '<span class="lref" title="' + esc(backlogRel(i) + " line " + i.line) + '">L' + esc(i.line) + "</span>";
+      return '<div class="card task' + (i.checked ? " done" : "") + '"' + (LIVE ? ' draggable="true"' : "") + ' data-task="' + esc(i.key) + '">' +
+        '<div class="t">' + lref + esc(i.title) + "</div>" +
         (i.desc ? '<div class="d">' + esc(i.desc) + "</div>" : "") +
         '<div class="meta">' + meta + "</div></div>";
     }).join("") : '<div class="empty">—</div>';
-    return '<div class="col"><div class="hd">' + s + " <em>" + items.length + "</em></div>" + cards + "</div>";
+    return '<div class="col" data-section="' + s + '"><div class="hd">' + s + " <em>" + items.length + "</em></div>" + cards + "</div>";
   }).join("");
   return healthBanner + banner + '<div class="cols">' + cols + "</div>";
 }
@@ -309,7 +346,7 @@ function taskByKey(key) {
   const [pid, sec, idx] = String(key).split("|");
   const p = DATA.projects.find((x) => x.id === pid);
   const item = p && p.backlog && p.backlog[sec] && p.backlog[sec][Number(idx)];
-  return item ? { ...item, project: p.id, projectPath: p.path, section: sec } : null;
+  return item ? { ...item, project: p.id, projectPath: p.path, section: sec, index: Number(idx) } : null;
 }
 
 // tiny markdown renderer for the prompt briefs and notes: headings, lists,
@@ -436,8 +473,11 @@ function drawerHTML(t) {
       (state ? '<span class="tag">' + esc(state) + "</span>" : "") + prTag + opLink(short || "", w.path, "Open " + w.path) + "</div></div>";
   }).join("") + "</div>" : '<div class="empty">no matched worktree — matching uses the prompt folder slug</div>';
   const line = t.file ? opLink(t.file + " · line " + t.line, absPath(t.projectPath, t.file)) : "";
-  return '<div class="td-head"><div class="td-crumb"><span class="dot ' + pclass(t.project) + '"></span>' + esc(t.project) + " · " + esc(t.section.toLowerCase()) + '</div><button class="btn" id="task-close" title="Close (Esc)">✕</button></div>' +
-    '<div class="td-title' + (t.checked ? " done" : "") + '">' + esc(t.title) + "</div>" +
+  const lref = '<span class="lref" title="' + esc(backlogRel(t) + " line " + t.line) + '">L' + esc(t.line) + "</span>";
+  return '<div class="td-head"><div class="td-crumb"><span class="dot ' + pclass(t.project) + '"></span>' + esc(t.project) + " · " + esc(t.section.toLowerCase()) + '</div>' +
+    (LIVE ? '<button class="btn danger" id="task-cancel" title="Remove this task line from the backlog — git keeps the history">cancel</button>' : "") +
+    '<button class="btn" id="task-close" title="Close (Esc)">✕</button></div>' +
+    '<div class="td-title' + (t.checked ? " done" : "") + '">' + lref + esc(t.title) + "</div>" +
     (t.desc ? '<div class="td-desc">' + esc(t.desc) + "</div>" : "") +
     '<div class="td-tags">' + tags + "</div>" +
     promptSec +
@@ -449,6 +489,7 @@ function openTask(key) {
   const t = taskByKey(key);
   if (!t) return;
   clearTimeout(closeTimer);
+  state.openKey = key;
   const panel = document.getElementById("task-panel");
   panel.scrollTop = 0;
   panel.innerHTML = drawerHTML(t);
@@ -462,11 +503,165 @@ function openTask(key) {
 function closeTask(immediate) {
   const w = wrapEl();
   if (!w || w.hidden) return;
+  state.openKey = null;
   clearTimeout(closeTimer);
   w.classList.remove("on");
   if (immediate) w.hidden = true;
   else closeTimer = setTimeout(() => { w.hidden = true; }, 160);
 }
+
+// ---------------------------------------------------------------- task writes
+
+// Every request carries the raw block exactly as the last scan saw it, and for
+// moves the anchor it lands above. The server verifies both against the file,
+// answers 409 when someone wrote first, and returns a fresh scan when the
+// write landed. If the drawer was open on the moved task it reopens at the
+// task's new position.
+async function moveTask(key, to, anchorKey) {
+  if (writing) return;
+  const t = taskByKey(key);
+  if (!t || !t.block) return;
+  const [pid, sec] = String(key).split("|");
+  let before = null; // null = end of the target section
+  if (anchorKey) {
+    const anchor = taskByKey(anchorKey);
+    if (!anchor || !anchor.block) return;
+    before = { index: anchor.index, block: anchor.block };
+  }
+  const reopen = state.openKey === key;
+  writing = true;
+  try {
+    const out = await postJSON("/task/move", { project: pid, section: sec, index: t.index, to, before, block: t.block });
+    if (out.data) applyData(out.data);
+    if (reopen) openTask(out.at ? pid + "|" + out.at.section + "|" + out.at.index : key);
+    toast(sec === to ? "reordered" : "moved to " + to.toLowerCase());
+  } catch (err) {
+    if (err.status === 409) toast("backlog changed, reload");
+    else toast("move failed — " + err.message);
+  } finally {
+    writing = false;
+  }
+}
+
+async function cancelTask() {
+  const key = state.openKey;
+  const t = key && taskByKey(key);
+  if (!t || !t.block || writing) return;
+  if (!confirm('Cancel "' + t.title + '"?\n\nRemoves the task line (and its D: lines) from ' + backlogRel(t) + " · line " + t.line + ".\nGit history keeps the text; the prompt folder stays.")) return;
+  const [pid, sec] = key.split("|");
+  writing = true;
+  try {
+    const out = await postJSON("/task/cancel", { project: pid, section: sec, index: t.index, block: t.block });
+    if (out.data) applyData(out.data);
+    toast("task canceled");
+  } catch (err) {
+    if (err.status === 409) toast("backlog changed, reload");
+    else toast("cancel failed — " + err.message);
+  } finally {
+    writing = false;
+  }
+}
+
+// ---------------------------------------------------------------- drag & drop
+
+// Cards are draggable in live mode only. The drop lands at the card under the
+// pointer (top half = above it, bottom half = below it); with no anchor card
+// the block goes to the top of its section. One column holds several
+// projects and line order is per project, so the anchor is always the nearest
+// card of the dragged task's own project — the marker shows exactly where the
+// block will land. Dropping a card back into its own slot is a no-op.
+let dragKey = null;
+
+function clearDropMarker(scope) {
+  scope.querySelectorAll(".card.drop-before, .card.drop-after")
+    .forEach((el) => el.classList.remove("drop-before", "drop-after"));
+}
+
+function clearDragState() {
+  dragKey = null;
+  document.querySelectorAll(".card.dragging").forEach((el) => el.classList.remove("dragging"));
+  document.querySelectorAll(".col.drag-over").forEach((el) => el.classList.remove("drag-over"));
+  clearDropMarker(document);
+}
+
+// Where a drop at clientY would land: q = position among the dragged
+// project's cards in this column (the dragged card itself excluded),
+// remaining = those cards' keys in visual order.
+function dropTarget(col, clientY, key) {
+  const pid = String(key).split("|")[0];
+  const cards = [...col.querySelectorAll(".card.task")];
+  let boundary = cards.length;
+  for (let i = 0; i < cards.length; i++) {
+    const r = cards[i].getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) { boundary = i; break; }
+  }
+  const remaining = [];
+  let q = 0;
+  cards.forEach((c, i) => {
+    const k = c.dataset.task;
+    if (!k.startsWith(pid + "|") || k === key) return;
+    if (i < boundary) q++;
+    remaining.push(k);
+  });
+  return { q, remaining };
+}
+
+function showDropMarker(col, clientY, key) {
+  clearDropMarker(col);
+  const [pid, sec, idx] = String(key).split("|");
+  const { q, remaining } = dropTarget(col, clientY, key);
+  if (col.dataset.section === sec && q === Number(idx)) return; // own slot
+  if (!remaining.length) return; // no anchor card: only position is the top
+  const anchorKey = remaining[q < remaining.length ? q : remaining.length - 1];
+  const el = col.querySelector('.card.task[data-task="' + anchorKey + '"]');
+  if (el) el.classList.add(q < remaining.length ? "drop-before" : "drop-after");
+}
+
+document.addEventListener("dragstart", (e) => {
+  const card = LIVE && e.target.closest && e.target.closest(".card.task[data-task]");
+  if (!card) return;
+  dragKey = card.dataset.task;
+  card.classList.add("dragging");
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragKey);
+  }
+});
+
+document.addEventListener("dragend", clearDragState);
+
+document.addEventListener("dragover", (e) => {
+  if (!LIVE || !dragKey) return;
+  const col = e.target.closest && e.target.closest(".col[data-section]");
+  if (!col) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  if (!col.classList.contains("drag-over")) {
+    document.querySelectorAll(".col.drag-over").forEach((el) => el.classList.remove("drag-over"));
+    col.classList.add("drag-over");
+  }
+  showDropMarker(col, e.clientY, dragKey);
+});
+
+document.addEventListener("dragleave", (e) => {
+  const col = e.target.closest && e.target.closest(".col[data-section]");
+  if (!col || (e.relatedTarget && col.contains(e.relatedTarget))) return;
+  col.classList.remove("drag-over");
+});
+
+document.addEventListener("drop", (e) => {
+  if (!LIVE || !dragKey) return;
+  const col = e.target.closest && e.target.closest(".col[data-section]");
+  if (!col) return;
+  e.preventDefault();
+  const key = dragKey;
+  const to = col.dataset.section;
+  const { q, remaining } = dropTarget(col, e.clientY, key);
+  clearDragState();
+  const [, sec, idx] = String(key).split("|");
+  if (sec === to && q === Number(idx)) return; // own slot: no-op
+  moveTask(key, to, q < remaining.length ? remaining[q] : null);
+});
 
 function renderFoot() {
   $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc console` for the live console · " : "live · data rescans on every load · click paths to open locally · ") +
@@ -497,6 +692,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (e.target.id === "task-backdrop" || e.target.id === "task-close") { closeTask(); return; }
+  if (e.target.id === "task-cancel") { cancelTask(); return; }
   const cardEl = e.target.closest("[data-task]");
   if (cardEl) { openTask(cardEl.dataset.task); return; }
   const chipEl = e.target.closest("[data-project]");
