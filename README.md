@@ -82,7 +82,7 @@ projects that have adopted the standards — the ones `opc sync` writes to.
 ```sh
 opc check         # expect 0 errors; info = pending retrofits, not problems
 opc sync          # expect "up to date" for standardized projects
-opc console       # http://localhost:4770 — reload rescans; click paths to open files
+opc console       # http://localhost:4770 — reload rescans; click paths to open files; --lan for the phone on wifi
 ```
 
 ### 7 · Install the agent skills (machine-wide)
@@ -107,7 +107,7 @@ that has not adopted the standards yet shows as "pending retrofit" in
 ## Daily use
 
 - `opc check [--dir <checkout>]` — deterministic health: drift, markers, backlog lines, links; audits the checkout you run it from (worktree included); the hub's main checkout still audits every project; `--dir` overrides
-- `opc console` — the console; rescans on every load (board · worktrees · RFCs · docs · prompts · health)
+- `opc console [--lan]` — the console; rescans on every load (board · worktrees · RFCs · docs · prompts · health); `--lan` also answers your home wifi so a phone can read and edit (same network only; opening paths stays Mac-only)
 - `opc sync [project…] [--dir <checkout>]` — push standards changes into standardized projects; targets the checkout you run it from (worktree included); the hub's main checkout still syncs all standardized projects; `--dir` overrides
 - `opc scan --snapshot` — refresh the self-contained `console/snapshot.html`
 

@@ -1044,9 +1044,23 @@ const isLoopback = (req) => {
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 };
 
+// --lan also accepts your private network: RFC1918 ranges and the CGNAT
+// block Tailscale hands out. Public addresses never qualify.
+const isPrivate = (req) => {
+  const ip = (req.socket.remoteAddress || "").replace(/^::ffff:/, "");
+  if (ip.startsWith("10.") || ip.startsWith("192.168.")) return true;
+  if (ip.startsWith("100.")) {
+    const second = Number(ip.split(".")[1]);
+    return second >= 64 && second <= 127;
+  }
+  const m = ip.match(/^172\.(\d+)\./);
+  return Boolean(m) && Number(m[1]) >= 16 && Number(m[1]) <= 31;
+};
+
 async function cmdConsole(args) {
   const portIdx = args.indexOf("--port");
   const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 4770;
+  const lan = args.includes("--lan"); // opt-in: also answer the private network
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
@@ -1055,12 +1069,17 @@ async function cmdConsole(args) {
       res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
       res.end(JSON.stringify(payload));
     };
-    if (!isLoopback(req)) { res.writeHead(403); return res.end("localhost only"); }
+    if (!isLoopback(req) && !(lan && isPrivate(req))) {
+      res.writeHead(403);
+      return res.end(lan ? "localhost or your private network only" : "localhost only — run with --lan for your home network");
+    }
 
     // ---- task writes: add a task, move or reposition it, cancel it
     if (req.method === "POST" && (url.pathname === "/task/add" || url.pathname === "/task/move" || url.pathname === "/task/cancel")) {
       const origin = req.headers.origin;
-      if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin))
+      const originHost = origin && origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      const sameHost = originHost && originHost === String(req.headers.host || "");
+      if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin) && !(lan && sameHost))
         return sendJson(403, { ok: false, error: "cross-origin write refused" });
       let body = null;
       try { body = JSON.parse(await readBody(req)); } catch { /* answered below */ }
@@ -1181,7 +1200,9 @@ async function cmdConsole(args) {
       return res.end(JSON.stringify(data));
     }
     if (name === "open") {
-      // Local convenience: hand an allowlisted path to the OS opener.
+      // Local convenience: hand an allowlisted path to the OS opener. Stays
+      // loopback-only even with --lan — it acts on this Mac, not the browser.
+      if (!isLoopback(req)) { res.writeHead(403); return res.end("open runs on the mac only"); }
       const raw = url.searchParams.get("path") || "";
       if (!raw) { res.writeHead(400); return res.end("missing path"); }
       const target = raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(2)) : path.resolve(raw);
@@ -1228,8 +1249,15 @@ async function cmdConsole(args) {
   const h = data.health;
   const healthLine = h.errors + h.warnings + h.infos ? `health: ${healthCounts(h)}` : "health: clean";
   const pending = data.projects.filter((p) => p.exists && !p.backlog).map((p) => p.id);
-  server.listen(port, () => {
+  server.listen(port, lan ? "0.0.0.0" : "127.0.0.1", () => {
     console.log(`opc console → http://localhost:${port}`);
+    if (lan) {
+      const nets = Object.entries(os.networkInterfaces())
+        .flatMap(([name, addrs]) => (addrs || []).map((a) => ({ name, ...a })));
+      const ip = (nets.find((a) => a.family === "IPv4" && !a.internal && a.name.startsWith("en")) ||
+        nets.find((a) => a.family === "IPv4" && !a.internal))?.address;
+      console.log(`lan → http://${ip || "<this mac's wifi ip>"}:${port} — same wifi only; anyone on it can read and edit backlogs`);
+    }
     console.log(healthLine);
     console.log(`pending retrofit: ${pending.length ? pending.join(", ") : "none"} — data rescans on every load`);
   });
@@ -1243,7 +1271,7 @@ async function main() {
   if (cmd === "check") return cmdCheck(args);
   if (cmd === "scan") return cmdScan(args);
   if (cmd === "console") return cmdConsole(args);
-  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N]  serve the console at http://localhost:N\n  sync/check follow the checkout you run them from; --dir overrides");
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 
