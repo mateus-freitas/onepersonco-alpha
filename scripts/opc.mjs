@@ -437,33 +437,53 @@ function parseBacklog(file) {
   if (!fs.existsSync(file)) return null;
   const sections = { Now: [], Next: [], Later: [], Done: [] };
   let current = null;
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+  let last = null; // the last item parsed — anchor for `D:` description lines
+  const lines = fs.readFileSync(file, "utf8").split("\n");
+  lines.forEach((line, i) => {
     const h = line.match(/^##\s+(.+)$/);
     if (h) {
       current = SECTIONS.find((s) => h[1].trim().toLowerCase().startsWith(s.toLowerCase())) || null;
-      continue;
+      last = null;
+      return;
     }
-    if (!current) continue;
+    if (!current) return;
     const item = line.match(/^-\s+\[( |x|X)\]\s+(.+)$/);
-    if (!item) continue;
-    let rest = item[2].trim();
-    let spec = null;
-    let priority = null;
-    let date = null;
-    const specM = rest.match(/\s+—\s+spec:\s+(\S+)/);
-    if (specM) { spec = specM[1]; rest = rest.replace(specM[0], ""); }
-    const priM = rest.match(/\s+—\s+(p[0-3]|P[0-3])\s*$/);
-    if (priM) { priority = priM[1].toLowerCase(); rest = rest.replace(priM[0], ""); }
-    const dateM = rest.match(/\s+—\s+(\d{4}-\d{2}-\d{2})\s*$/);
-    if (dateM) { date = dateM[1]; rest = rest.replace(dateM[0], ""); }
-    sections[current].push({
-      title: rest.trim(),
-      spec,
-      priority,
-      date,
-      checked: item[1].toLowerCase() === "x",
-    });
-  }
+    if (item) {
+      let rest = item[2].trim();
+      let spec = null;
+      let prompt = null;
+      let priority = null;
+      let date = null;
+      const specM = rest.match(/\s+—\s+spec:\s+(\S+)/);
+      if (specM) { spec = specM[1]; rest = rest.replace(specM[0], ""); }
+      const promptM = rest.match(/\s+—\s+prompt:\s+(\S+)/);
+      if (promptM) { prompt = promptM[1]; rest = rest.replace(promptM[0], ""); }
+      const priM = rest.match(/\s+—\s+(p[0-3]|P[0-3])\s*$/);
+      if (priM) { priority = priM[1].toLowerCase(); rest = rest.replace(priM[0], ""); }
+      const dateM = rest.match(/\s+—\s+(\d{4}-\d{2}-\d{2})\s*$/);
+      if (dateM) { date = dateM[1]; rest = rest.replace(dateM[0], ""); }
+      last = {
+        title: rest.trim(),
+        desc: null,
+        spec,
+        prompt,
+        priority,
+        date,
+        checked: item[1].toLowerCase() === "x",
+        line: i + 1,
+      };
+      sections[current].push(last);
+      return;
+    }
+    // an indented `D:`/`desc:` line right under an item is its description —
+    // free text, so it may safely contain em dashes and anything else
+    const desc = last && line.match(/^\s+(?:d|desc):\s*(.+?)\s*$/i);
+    if (desc) {
+      last.desc = last.desc ? `${last.desc} ${desc[1]}` : desc[1];
+      return;
+    }
+    last = null;
+  });
   return sections;
 }
 
@@ -496,7 +516,7 @@ function listPromptSessions(scratchRoot, id) {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+    .filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "archive")
     .map((e) => {
       const full = path.join(dir, e.name);
       const files = fs.readdirSync(full).filter((f) => !f.startsWith(".")).length;
@@ -510,6 +530,81 @@ function listPromptSessions(scratchRoot, id) {
       };
     })
     .sort((a, b) => (b.mtime || "").localeCompare(a.mtime || ""));
+}
+
+// Resolve a backlog item's `prompt:` value to its scratch folder. The value is
+// a folder name under `<scratch>/<project>/prompts/` or a path relative to the
+// project's scratch root; a folder already archived still resolves. Returns
+// the folder's file names plus its written records (TASK.md/KICKOFF.md,
+// NOTES.md), or null. Only those files are read — session folders can hold
+// large evidence artifacts.
+const SCRATCH_FILE_LIMIT = 96 * 1024;
+
+// Read at most SCRATCH_FILE_LIMIT bytes, and only when the canonical file sits
+// inside the canonical session dir — a symlinked folder or file must not pull
+// outside content into scan data or snapshots.
+function readScratchFile(dir, name) {
+  const file = path.join(dir, name);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return null;
+  if (!real(file).startsWith(real(dir) + path.sep)) return null;
+  let text;
+  try {
+    const fd = fs.openSync(file, "r");
+    try {
+      const buf = Buffer.alloc(SCRATCH_FILE_LIMIT);
+      const bytes = fs.readSync(fd, buf, 0, SCRATCH_FILE_LIMIT, 0);
+      text = buf.toString("utf8", 0, bytes);
+      if (fs.fstatSync(fd).size > SCRATCH_FILE_LIMIT) text += "\n… [truncated by opc scan]";
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch { return null; }
+  return { name, content: text };
+}
+
+function resolvePrompt(projectId, value) {
+  if (!value || value.includes("..") || path.isAbsolute(value)) return null;
+  const scratch = expand(registry.scratchRoot);
+  const root = path.join(scratch, projectId);
+  const candidates = value.includes("/")
+    ? [path.join(root, value), path.join(root, "prompts", "archive", path.basename(value))]
+    : [path.join(root, "prompts", value), path.join(root, "prompts", "archive", value)];
+  const scratchReal = real(scratch);
+  for (const dir of candidates) {
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
+    if (!real(dir).startsWith(scratchReal + path.sep)) continue; // symlink must not escape the scratch root
+    let files;
+    try { files = fs.readdirSync(dir).filter((f) => !f.startsWith(".")).sort(); } catch { continue; }
+    return {
+      name: path.basename(dir),
+      rel: path.relative(scratch, dir),
+      path: dir,
+      archived: dir.includes(`${path.sep}archive${path.sep}`),
+      files,
+      task: readScratchFile(dir, "TASK.md") || readScratchFile(dir, "KICKOFF.md"),
+      notes: readScratchFile(dir, "NOTES.md"),
+    };
+  }
+  return null;
+}
+
+// A task's prompt folder slug (date prefix stripped) is the anchor linking the
+// item to the worktree(s) doing the work: branch or directory names carrying
+// the same slug belong to the task. Deterministic — no fuzzy title matching.
+function itemSlug(item) {
+  if (!item.promptInfo) return null;
+  const slug = item.promptInfo.name.toLowerCase().replace(/^\d{4}-\d{2}-\d{2}-/, "");
+  return slug.length >= 4 ? slug : null;
+}
+
+function matchWorktrees(item, worktrees) {
+  const slug = itemSlug(item);
+  if (!slug) return [];
+  const norm = (s) => String(s || "").toLowerCase().replace(/^[a-z]+\//, "");
+  return worktrees.filter((w) => {
+    const names = [norm(w.branch), path.basename(w.path || "").toLowerCase()];
+    return names.some((n) => n && (n.includes(slug) || slug.includes(n)) && Math.min(n.length, slug.length) >= 4);
+  });
 }
 
 function scanProject(p) {
@@ -533,6 +628,15 @@ function scanProject(p) {
   };
   if (!exists) return entry;
   entry.backlog = parseBacklog(path.join(docsDir, "backlog.md"));
+  if (entry.backlog) {
+    const backlogRel = path.relative(dir, path.join(docsDir, "backlog.md"));
+    for (const s of SECTIONS) {
+      for (const item of entry.backlog[s]) {
+        item.file = backlogRel;
+        item.promptInfo = item.prompt ? resolvePrompt(p.id, item.prompt) : null;
+      }
+    }
+  }
   if (fs.existsSync(docsDir)) {
     for (const f of walk(docsDir)) {
       if (f.includes(`${path.sep}prompts${path.sep}`)) {
@@ -544,6 +648,11 @@ function scanProject(p) {
     }
   }
   entry.promptSessions = listPromptSessions(registry.scratchRoot, p.id);
+  const linked = new Set();
+  if (entry.backlog) {
+    for (const s of SECTIONS) for (const item of entry.backlog[s]) if (item.promptInfo) linked.add(real(item.promptInfo.path));
+  }
+  for (const s of entry.promptSessions) s.linked = linked.has(real(s.path));
   return entry;
 }
 
@@ -554,6 +663,11 @@ async function scanAll() {
     const entry = scanProject(p);
     entry.health = perProject.get(p.id);
     entry.worktrees = byId.get(p.id) || [];
+    if (entry.backlog) {
+      for (const s of SECTIONS) {
+        for (const item of entry.backlog[s]) item.worktrees = matchWorktrees(item, entry.worktrees);
+      }
+    }
     return entry;
   });
   return {
@@ -660,9 +774,12 @@ function checkBacklog(p, dir, add) {
   }
   for (const s of SECTIONS) {
     for (const item of backlog[s]) {
-      if (!item.spec) continue;
-      const target = item.spec.startsWith("~/") ? expand(item.spec) : path.resolve(dir, item.spec);
-      if (!fs.existsSync(target)) add("error", "backlog.spec", `spec does not resolve: ${item.spec}`, rel);
+      if (item.spec) {
+        const target = item.spec.startsWith("~/") ? expand(item.spec) : path.resolve(dir, item.spec);
+        if (!fs.existsSync(target)) add("error", "backlog.spec", `spec does not resolve: ${item.spec}`, rel);
+      }
+      if (item.prompt && !resolvePrompt(p.id, item.prompt))
+        add("error", "backlog.prompt", `prompt does not resolve: ${item.prompt}`, rel);
     }
   }
 }

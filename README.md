@@ -121,7 +121,10 @@ that has not adopted the standards yet shows as "pending retrofit" in
   theme; dark by default; every color is a token). No build step, no deps. The
   Worktrees tab lists every project's linked checkouts (branch, dirty, ahead/behind
   vs local `main`, last commit, PR state via `gh`, clickable paths); without an
-  authenticated `gh` the PR states are hidden and the scan still works.
+  authenticated `gh` the PR states are hidden and the scan still works. Board
+  cards carry the task's `D:` description and `prompt`/`worktree` state, and open
+  a detail drawer: the prompt folder, its rendered `TASK.md`/`NOTES.md`, the
+  matched worktrees, and the backlog line itself.
 - **The CLI** is `scripts/opc.mjs` — plain Node, stdlib only. Keep it
   dependency-free; `node --check` + `opc check` before committing.
 - **Skills** live in `skills/<name>/SKILL.md`. Quote frontmatter descriptions

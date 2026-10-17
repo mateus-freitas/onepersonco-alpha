@@ -21,8 +21,9 @@ You are the orchestrator. You own architecture, interfaces, integration, and
    the hub's `standards/templates/prompt-folder.md`). A brief carries: workdir
    and owned files, the exact deliverable, how to verify, the forbidden
    actions ("do not commit, push, or merge — leave the tree dirty"), and where
-   to write `NOTES.md`. An incomplete brief is not a delegation — it is a
-   gamble.
+   to write `NOTES.md`. Record the folder on the task's backlog line
+   (`— prompt: prompts/<folder>`) so the console links brief and worktree. An
+   incomplete brief is not a delegation — it is a gamble.
 4. **Launch.** T3 Code: `delegate_task` (one task per brief, async, stable
    `clientRequestId`, model in `target`); Claude: the subagent tool; Codex:
    `codex exec -C <worktree> -m <model> …`. Parallel workers get their own

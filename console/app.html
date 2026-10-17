@@ -63,6 +63,40 @@
   .sessions{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
   .group-hd{color:var(--muted-foreground);font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin:4px 0 8px;display:flex;align-items:center;gap:6px}
   footer{color:var(--muted-foreground);font-size:11px}
+  /* task detail — board cards open a drawer; content stays on the dimmed board */
+  .card.task{cursor:pointer}
+  .card.task:hover{border-color:var(--ring)}
+  .card .d{margin-top:4px;color:var(--muted-foreground);font-size:11px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  #task-wrap{position:fixed;inset:0;z-index:40}
+  #task-wrap[hidden]{display:none}
+  #task-backdrop{position:absolute;inset:0;background:rgb(0 0 0 / .35);opacity:0;transition:opacity .15s}
+  .dark #task-backdrop{background:rgb(0 0 0 / .55)}
+  #task-panel{position:absolute;top:0;right:0;bottom:0;width:min(640px,96vw);background:var(--card);border-left:1px solid var(--border);overflow:auto;padding:16px 18px 26px;display:flex;flex-direction:column;gap:12px;transform:translateX(28px);opacity:0;transition:transform .15s,opacity .15s}
+  #task-wrap.on #task-backdrop,#task-wrap.on #task-panel{opacity:1}
+  #task-wrap.on #task-panel{transform:none}
+  .td-head{display:flex;align-items:center;gap:8px}
+  .td-head .btn{margin-left:auto}
+  .td-crumb{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-foreground);display:flex;align-items:center;gap:6px}
+  .td-title{font-size:15px;font-weight:600;line-height:1.4}
+  .td-title.done{text-decoration:line-through;opacity:.6}
+  .td-desc{font-size:12.5px;line-height:1.55}
+  .td-tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .td-sec{border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px}
+  .td-sec .hd{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground);display:flex;gap:8px;align-items:center}
+  .td-files{display:flex;flex-direction:column;gap:2px;font-size:11.5px}
+  .md{font-size:12.5px;line-height:1.6;overflow-wrap:anywhere}
+  .md h1{font-size:15px;margin:10px 0 4px}
+  .md h2,.md h3,.md h4{font-size:13px;margin:10px 0 4px}
+  .md p{margin:6px 0}
+  .md ul,.md ol{margin:6px 0;padding-left:18px}
+  .md li{margin:2px 0}
+  .md code{font-size:11px;background:var(--secondary);padding:1px 4px}
+  .md pre{background:var(--secondary);padding:8px 10px;overflow:auto;font-size:11px;line-height:1.5;margin:6px 0}
+  .md pre code{background:none;padding:0}
+  .md blockquote{border-left:2px solid var(--border);margin:6px 0;padding:2px 0 2px 10px;color:var(--muted-foreground)}
+  .md hr{border:none;border-top:1px solid var(--border);margin:10px 0}
+  .md a{color:inherit}
+  .td-foot{margin-top:auto;border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--muted-foreground);display:flex;gap:10px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -80,6 +114,10 @@
   <main id="view"></main>
   <footer id="foot"></footer>
 </div>
+<div id="task-wrap" hidden>
+  <div id="task-backdrop"></div>
+  <aside id="task-panel" role="dialog" aria-modal="true" aria-label="Task detail"></aside>
+</div>
 <!--__DATA__-->
 <script>
 const $ = (s, el = document) => el.querySelector(s);
@@ -88,7 +126,6 @@ const state = { tab: "board", project: "all" };
 const pcls = new Map();
 const pclass = (id) => { if (!pcls.has(id)) pcls.set(id, ["pa", "pb", "pc", "pd", "pe"][pcls.size % 5]); return pcls.get(id); };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const icon = (ok) => ok ? "☑" : "☐";
 const LIVE = !window.__DATA__;
 let toastTimer = null;
 function toast(msg) {
@@ -153,15 +190,20 @@ function renderBoard() {
     ? '<div class="banner">opc check reports <b>' + esc(h.errors) + (Number(h.errors) === 1 ? " error" : " errors") + "</b> — open the Health tab</div>"
     : "";
   const cols = ["Now", "Next", "Later", "Done"].map((s) => {
-    const items = filtered().flatMap((p) => backlogOf(p)[s].map((i) => ({ ...i, project: p.id, projectPath: p.path })));
+    const items = filtered().flatMap((p) => backlogOf(p)[s].map((i, idx) => ({ ...i, project: p.id, projectPath: p.path, key: p.id + "|" + s + "|" + idx })));
     const cards = items.length ? items.map((i) => {
+      const wt = (i.worktrees && i.worktrees.length) ? i.worktrees[0] : null;
       const meta = [
         '<span class="dot ' + pclass(i.project) + '"></span>' + esc(i.project),
         i.spec ? '<span class="tag">' + opLink("spec ↗", absPath(i.projectPath, i.spec)) + "</span>" : "",
         i.priority ? '<span class="tag">' + esc(i.priority) + "</span>" : "",
+        i.promptInfo ? '<span class="tag" title="prompt: ' + esc(i.promptInfo.rel) + '">prompt</span>' : "",
+        wt ? '<span class="tag" title="' + esc(wt.branch || wt.path || "") + '">worktree</span>' : "",
         i.date ? '<span class="tag">' + esc(i.date) + "</span>" : "",
       ].filter(Boolean).join(" ");
-      return '<div class="card' + (i.checked ? " done" : "") + '"><div class="t">' + icon(i.checked) + " " + esc(i.title) + '</div><div class="meta">' + meta + "</div></div>";
+      return '<div class="card task' + (i.checked ? " done" : "") + '" data-task="' + esc(i.key) + '"><div class="t">' + esc(i.title) + "</div>" +
+        (i.desc ? '<div class="d">' + esc(i.desc) + "</div>" : "") +
+        '<div class="meta">' + meta + "</div></div>";
     }).join("") : '<div class="empty">—</div>';
     return '<div class="col"><div class="hd">' + s + " <em>" + items.length + "</em></div>" + cards + "</div>";
   }).join("");
@@ -194,7 +236,8 @@ function renderPrompts() {
     const cards = sessions.map((s) => {
       const age = Math.round((Date.now() - new Date(s.mtime + "T12:00:00").getTime()) / 86400000);
       const stale = age > 7 ? ' <span class="tag danger">stale ' + age + "d</span>" : "";
-      return '<div class="card"><div class="t">📁 ' + opLink(s.name, s.path) + '</div><div class="meta"><span class="mono">' + s.files + " file(s)" + (s.date ? " · " + esc(s.date) : "") + "</span>" + stale + "</div></div>";
+      const linked = s.linked ? "" : ' <span class="tag muted" title="no backlog task links this folder yet">unlinked</span>';
+      return '<div class="card"><div class="t">📁 ' + opLink(s.name, s.path) + '</div><div class="meta"><span class="mono">' + s.files + " file(s)" + (s.date ? " · " + esc(s.date) : "") + "</span>" + stale + linked + "</div></div>";
     }).join("");
     if (!sessions.length && !legacyNote) return "";
     return '<div><div class="group-hd"><span class="dot ' + pclass(p.id) + '"></span>' + esc(p.id) + '</div><div class="sessions">' + (cards || '<div class="empty">no active sessions in scratch</div>') + "</div>" + legacyNote + "</div>";
@@ -257,6 +300,174 @@ function renderWorktrees() {
   return banner + (groups || '<div class="empty">No registered projects.</div>');
 }
 
+// ---------------------------------------------------------------- task detail
+
+let closeTimer = null;
+const wrapEl = () => document.getElementById("task-wrap");
+
+function taskByKey(key) {
+  const [pid, sec, idx] = String(key).split("|");
+  const p = DATA.projects.find((x) => x.id === pid);
+  const item = p && p.backlog && p.backlog[sec] && p.backlog[sec][Number(idx)];
+  return item ? { ...item, project: p.id, projectPath: p.path, section: sec } : null;
+}
+
+// tiny markdown renderer for the prompt briefs and notes: headings, lists,
+// checkboxes, fenced code, quotes, hr, inline code/bold/italic and http(s)
+// links. Everything is escaped first; no raw HTML ever reaches innerHTML.
+function inlineMd(s) {
+  const codes = [];
+  let h = esc(s).replace(/`([^`]+)`/g, (_, c) => {
+    codes.push(c);
+    return "\uE000" + (codes.length - 1) + "\uE001";
+  });
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  h = h.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return h.replace(/\uE000(\d+)\uE001/g, (_, i) => "<code>" + (codes[+i] || "") + "</code>");
+}
+
+// one list block, nested levels preserved and wrapped lines folded into their
+// item; ordered items keep their source number (briefs interleave nested
+// bullets, which must not restart the count)
+function mdList(lines, i) {
+  const bullet = (line) => {
+    const u = line.match(/^(\s*)[-*]\s+(.*)$/);
+    if (u) return { indent: u[1].length, ordered: false, num: null, text: u[2] };
+    const o = line.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
+    if (o) return { indent: o[1].length, ordered: true, num: o[2], text: o[3] };
+    return null;
+  };
+  const first = bullet(lines[i]);
+  const ordered = first.ordered;
+  const base = first.indent;
+  const items = [];
+  while (i < lines.length) {
+    const cur = bullet(lines[i]);
+    if (cur) {
+      if (cur.indent < base) break;
+      if (cur.indent > base) {
+        const [child, next] = mdList(lines, i);
+        if (items.length) items[items.length - 1].child += child;
+        i = next;
+        continue;
+      }
+      if (cur.ordered !== ordered) break; // a different list type at this level starts its own block
+      const box = cur.text.match(/^\[( |x|X)\]\s+(.*)$/);
+      items.push({
+        num: cur.num,
+        inner: box ? (box[1].trim() ? "☑ " : "☐ ") + inlineMd(box[2]) : inlineMd(cur.text),
+        child: "",
+      });
+      i++;
+      continue;
+    }
+    // a wrapped continuation line (deeper-indented plain text) belongs to the last item
+    if (items.length && lines[i].trim() && /^\s/.test(lines[i]) && !/^\s*```/.test(lines[i])) {
+      items[items.length - 1].inner += " " + inlineMd(lines[i].trim());
+      i++;
+      continue;
+    }
+    break;
+  }
+  const tag = ordered ? "ol" : "ul";
+  return ["<" + tag + ">" + items.map((it) => "<li" + (it.num ? ' value="' + it.num + '"' : "") + ">" + it.inner + it.child + "</li>").join("") + "</" + tag + ">", i];
+}
+
+function md(src) {
+  const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+  const out = [];
+  const para = [];
+  const flush = () => { if (para.length) { out.push("<p>" + inlineMd(para.join(" ")) + "</p>"); para.length = 0; } };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let m;
+    if (/^\s*```/.test(line)) {
+      flush();
+      const code = [];
+      for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) code.push(lines[i]);
+      out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>");
+      continue;
+    }
+    if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { flush(); out.push("<h" + m[1].length + ">" + inlineMd(m[2]) + "</h" + m[1].length + ">"); continue; }
+    if (/^\s*(?:-{3,}|\*{3,})\s*$/.test(line)) { flush(); out.push("<hr>"); continue; }
+    if ((m = line.match(/^>\s?(.*)$/))) {
+      flush();
+      const q = [m[1]];
+      while (i + 1 < lines.length && (m = lines[i + 1].match(/^>\s?(.*)$/))) { q.push(m[1]); i++; }
+      out.push("<blockquote>" + q.map(inlineMd).join("<br>") + "</blockquote>");
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
+      flush();
+      const [html, next] = mdList(lines, i);
+      out.push(html);
+      i = next - 1;
+      continue;
+    }
+    if (!line.trim()) { flush(); continue; }
+    para.push(line.trim());
+  }
+  flush();
+  return out.join("\n");
+}
+
+function drawerHTML(t) {
+  const wts = t.worktrees || [];
+  const home = (DATA.home || "").replace(/\/+$/, "");
+  const tags = [
+    t.priority ? '<span class="tag">' + esc(t.priority) + "</span>" : "",
+    t.date ? '<span class="tag">' + esc(t.date) + "</span>" : "",
+    t.spec ? '<span class="tag">' + opLink("spec ↗", absPath(t.projectPath, t.spec)) + "</span>" : "",
+    '<span class="tag muted">' + esc(t.section.toLowerCase()) + (t.checked ? " · done" : "") + "</span>",
+  ].filter(Boolean).join(" ");
+  const pr = t.promptInfo;
+  const promptSec = '<section class="td-sec"><div class="hd">Prompt</div>' + (pr
+    ? '<div class="td-tags">' + opLink(pr.name, pr.path, "Open " + pr.path) + (pr.archived ? '<span class="tag muted">archived</span>' : "") + "</div>" +
+      '<div class="td-files">' + pr.files.map((f) => opLink(f, pr.path + "/" + f)).join("") + "</div>" +
+      (pr.task ? '<div class="hd">' + esc(pr.task.name) + '</div><div class="md">' + md(pr.task.content) + "</div>" : "") +
+      (pr.notes ? '<div class="hd">' + esc(pr.notes.name) + '</div><div class="md">' + md(pr.notes.content) + "</div>" : "")
+    : '<div class="empty">no prompt folder linked — add <span class="mono">— prompt: prompts/&lt;folder&gt;</span> to the backlog line</div>') + "</section>";
+  const wtRows = wts.length ? '<div class="list">' + wts.map((w) => {
+    const short = home && w.path && w.path.startsWith(home) ? "~" + w.path.slice(home.length) : w.path;
+    const state = [w.dirty ? "✎ " + w.dirty : "", w.ahead ? "↑" + w.ahead : "", w.behind ? "↓" + w.behind : ""].filter(Boolean).join(" ");
+    const prTag = w.pr ? '<a class="tag' + (w.pr.state === "MERGED" ? " solid" : w.pr.state === "CLOSED" ? " danger" : w.pr.isDraft ? " muted" : "") + '" href="' + esc(w.pr.url) + '" target="_blank" rel="noopener" title="' + esc(w.pr.title || "") + '">#' + esc(w.pr.number) + " " + esc(String(w.pr.state || "").toLowerCase()) + "</a>" : "";
+    return '<div class="card"><div class="t mono">' + esc(w.branch || "?") + "</div><div class='meta'>" +
+      (state ? '<span class="tag">' + esc(state) + "</span>" : "") + prTag + opLink(short || "", w.path, "Open " + w.path) + "</div></div>";
+  }).join("") + "</div>" : '<div class="empty">no matched worktree — matching uses the prompt folder slug</div>';
+  const line = t.file ? opLink(t.file + " · line " + t.line, absPath(t.projectPath, t.file)) : "";
+  return '<div class="td-head"><div class="td-crumb"><span class="dot ' + pclass(t.project) + '"></span>' + esc(t.project) + " · " + esc(t.section.toLowerCase()) + '</div><button class="btn" id="task-close" title="Close (Esc)">✕</button></div>' +
+    '<div class="td-title' + (t.checked ? " done" : "") + '">' + esc(t.title) + "</div>" +
+    (t.desc ? '<div class="td-desc">' + esc(t.desc) + "</div>" : "") +
+    '<div class="td-tags">' + tags + "</div>" +
+    promptSec +
+    '<section class="td-sec"><div class="hd">Worktrees <span class="sub">' + wts.length + "</span></div>" + wtRows + "</section>" +
+    '<div class="td-foot">' + line + "</div>";
+}
+
+function openTask(key) {
+  const t = taskByKey(key);
+  if (!t) return;
+  clearTimeout(closeTimer);
+  const panel = document.getElementById("task-panel");
+  panel.scrollTop = 0;
+  panel.innerHTML = drawerHTML(t);
+  const w = wrapEl();
+  w.hidden = false;
+  requestAnimationFrame(() => w.classList.add("on"));
+  const btn = document.getElementById("task-close");
+  if (btn) btn.focus();
+}
+
+function closeTask(immediate) {
+  const w = wrapEl();
+  if (!w || w.hidden) return;
+  clearTimeout(closeTimer);
+  w.classList.remove("on");
+  if (immediate) w.hidden = true;
+  else closeTimer = setTimeout(() => { w.hidden = true; }, 160);
+}
+
 function renderFoot() {
   $("#foot").textContent = (window.__DATA__ ? "snapshot — run `opc console` for the live console · " : "live · data rescans on every load · click paths to open locally · ") +
     filtered().map((p) => p.id + (p.branch ? "@" + p.branch : "") + (p.dirty ? " ✎" + p.dirty : "")).join("  ·  ");
@@ -264,6 +475,7 @@ function renderFoot() {
 
 function render() {
   if (!DATA) return;
+  closeTask(true);
   $("#gen").textContent = "generated " + new Date(DATA.generatedAt).toLocaleString();
   if (state.tab === "health" && !DATA.health) state.tab = "board";
   renderChips();
@@ -284,12 +496,19 @@ document.addEventListener("click", (e) => {
       .catch(() => toast("could not open"));
     return;
   }
+  if (e.target.id === "task-backdrop" || e.target.id === "task-close") { closeTask(); return; }
+  const cardEl = e.target.closest("[data-task]");
+  if (cardEl) { openTask(cardEl.dataset.task); return; }
   const chipEl = e.target.closest("[data-project]");
   if (chipEl) { state.project = chipEl.dataset.project; render(); return; }
   const tabEl = e.target.closest("[data-tab]");
   if (tabEl) { state.tab = tabEl.dataset.tab; render(); return; }
   if (e.target.id === "theme") { document.documentElement.classList.toggle("dark"); return; }
   if (e.target.id === "rescan") { DATA = null; load(); }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeTask();
 });
 
 async function load() {
