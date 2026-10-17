@@ -107,6 +107,11 @@
   .md blockquote{border-left:2px solid var(--border);margin:6px 0;padding:2px 0 2px 10px;color:var(--muted-foreground)}
   .md hr{border:none;border-top:1px solid var(--border);margin:10px 0}
   .md a{color:inherit}
+  .md-block{display:flex;flex-direction:column;gap:4px}
+  .md-hd{display:flex;align-items:center;gap:8px}
+  .md-hd .hr{margin-left:auto;display:flex;gap:6px}
+  .btn.mini{padding:2px 8px;font-size:10.5px}
+  .md-raw{margin:0;background:var(--secondary);padding:8px 10px;font-size:11px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
   .td-foot{margin-top:auto;border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--muted-foreground);display:flex;gap:10px;flex-wrap:wrap}
   /* new task dialog — the drawer's flat language, centered */
   #new-wrap{position:fixed;inset:0;z-index:50;display:flex;justify-content:center;align-items:flex-start;padding:11vh 16px 16px}
@@ -504,6 +509,65 @@ function md(src) {
   return out.join("\n");
 }
 
+// Prompt files render as markdown with a copy button and a rendered/raw
+// toggle: over plain http on a phone the clipboard API is unavailable, so
+// copy falls back to selecting the raw source in place, and the toggle lets
+// you grab the source by hand any time.
+const mdBlock = (file) => !file ? "" :
+  '<div class="md-block" data-name="' + esc(file.name) + '">' +
+    '<div class="md-hd"><span class="hd">' + esc(file.name) + "</span>" +
+    '<span class="hr"><button class="btn mini" data-md-raw title="Show the markdown source">raw</button>' +
+    '<button class="btn mini" data-md-copy title="Copy the markdown source">copy</button></span></div>' +
+    '<div class="md md-rendered">' + md(file.content) + "</div>" +
+    '<pre class="md-raw" hidden>' + esc(file.content) + "</pre>" +
+  "</div>";
+
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through */ }
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;top:-2000px;left:0;opacity:0";
+  document.body.appendChild(ta);
+  let ok = false;
+  try {
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    ok = document.execCommand("copy"); // deprecated but the only option on http
+  } catch { ok = false; } finally { ta.remove(); }
+  return ok;
+}
+
+function selectNode(node) {
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch { /* selection is best-effort */ }
+}
+
+function toggleRaw(block) {
+  const raw = block.querySelector(".md-raw");
+  const rendered = block.querySelector(".md-rendered");
+  const btn = block.querySelector("[data-md-raw]");
+  const showRaw = raw.hidden;
+  raw.hidden = !showRaw;
+  rendered.hidden = showRaw;
+  btn.textContent = showRaw ? "rendered" : "raw";
+}
+
+async function copyBlock(block) {
+  const raw = block.querySelector(".md-raw");
+  if (await copyText(raw.textContent)) { toast("copied " + (block.dataset.name || "prompt")); return; }
+  if (raw.hidden) toggleRaw(block);
+  selectNode(raw);
+  toast("clipboard blocked — raw selected, tap Copy");
+}
+
 function drawerHTML(t) {
   const wts = t.worktrees || [];
   const home = (DATA.home || "").replace(/\/+$/, "");
@@ -517,8 +581,8 @@ function drawerHTML(t) {
   const promptSec = '<section class="td-sec"><div class="hd">Prompt</div>' + (pr
     ? '<div class="td-tags">' + opLink(pr.name, pr.path, "Open " + pr.path) + (pr.archived ? '<span class="tag muted">archived</span>' : "") + "</div>" +
       '<div class="td-files">' + pr.files.map((f) => opLink(f, pr.path + "/" + f)).join("") + "</div>" +
-      (pr.task ? '<div class="hd">' + esc(pr.task.name) + '</div><div class="md">' + md(pr.task.content) + "</div>" : "") +
-      (pr.notes ? '<div class="hd">' + esc(pr.notes.name) + '</div><div class="md">' + md(pr.notes.content) + "</div>" : "")
+      mdBlock(pr.task) +
+      mdBlock(pr.notes)
     : '<div class="empty">no prompt folder linked — add <span class="mono">— prompt: prompts/&lt;folder&gt;</span> to the backlog line</div>') + "</section>";
   const wtRows = wts.length ? '<div class="list">' + wts.map((w) => {
     const short = home && w.path && w.path.startsWith(home) ? "~" + w.path.slice(home.length) : w.path;
@@ -824,6 +888,13 @@ document.addEventListener("click", (e) => {
   if (e.target.id === "task-cancel") { cancelTask(); return; }
   if (e.target.id === "task-new") { openNew(); return; }
   if (e.target.id === "new-backdrop" || e.target.id === "new-close" || e.target.id === "new-cancel") { closeNew(); return; }
+  const mdBtn = e.target.closest("[data-md-raw], [data-md-copy]");
+  if (mdBtn) {
+    const block = mdBtn.closest(".md-block");
+    if (mdBtn.hasAttribute("data-md-raw")) toggleRaw(block);
+    else copyBlock(block);
+    return;
+  }
   const addBtn = e.target.closest("[data-add-section]");
   if (addBtn) { openNew(addBtn.dataset.addSection); return; }
   const cardEl = e.target.closest("[data-task]");
