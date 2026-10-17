@@ -9,6 +9,8 @@ optional); an indented `D: <text>` line under a task is its description.
 
 ## Next
 
+- [ ] P4 · Console write-back — prompt: prompts/2026-10-17-console-write-back
+  D: Move cards between columns, cancel a task from the drawer, and show `L<n>` line references on the board — all writes to `docs/backlog.md` behind conflict guards; details in the linked brief.
 - [ ] Retrofit blocos
   D: Backlog seed from the P2-xx roadmaps; add the `flutter` + `ts-firebase` platform overlays; consider Greptile parity (project-local trigger, not a hub rule).
 - [ ] Sync gymbloc
@@ -16,8 +18,8 @@ optional); an indented `D: <text>` line under a task is its description.
 
 ## Later
 
-- [ ] P4 · Console write-back
-  D: Drag a card to another column and persist it by editing the backlog line.
+- [ ] P4 · Collapsible board columns
+  D: When a column holds more than ~5 items, show the first few and a chevron button at the bottom over a transparent → background gradient; clicking expands the full column. Console-only.
 - [ ] P4 · Console task deep links
   D: The drawer is in-memory only; a hash route would let the owner link a task from a thread or a commit message.
 - [ ] P4 · Worktrees follow-ups
