@@ -528,12 +528,14 @@ const mdBlock = (file) => {
 };
 
 async function copyText(text) {
-  if (navigator.clipboard && window.isSecureContext) {
+  // Any clipboard API the browser exposes — localhost is a secure context and
+  // Safari can offer it even on plain http; a rejection just falls through.
+  if (navigator.clipboard) {
     try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through */ }
   }
-  // iOS ignores the hidden-textarea trick and may even report success without
-  // copying — there the raw textarea plus the native Copy menu is the path.
-  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return false;
+  // The execCommand textarea trick is the one that works in a user gesture on
+  // iOS and Android over http; it copies the value exactly, so soft wrapping
+  // can never leak into the pasted text.
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.setAttribute("readonly", "");
