@@ -38,7 +38,7 @@
   .banner{border:1px dashed var(--border);border-radius:var(--radius);padding:10px 14px;color:var(--muted-foreground);font-size:12px}
   .banner b{color:var(--foreground)}
   .cols{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,.8fr);gap:10px}
-  @media (max-width:680px){.cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:680px){.cols{grid-template-columns:repeat(2,minmax(0,1fr))}.md-raw{font-size:16px}}
   .col{border:1px solid var(--border);border-radius:var(--radius);padding:10px;display:flex;flex-direction:column;gap:8px;min-height:80px;min-width:0;background:var(--card)}
   .col.drag-over{border-color:var(--ring);background:var(--accent)}
   .col .hd{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground);display:flex;gap:6px;align-items:center}
@@ -111,7 +111,8 @@
   .md-hd{display:flex;align-items:center;gap:8px}
   .md-hd .hr{margin-left:auto;display:flex;gap:6px}
   .btn.mini{padding:2px 8px;font-size:10.5px}
-  .md-raw{margin:0;background:var(--secondary);padding:8px 10px;font-size:11px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+  .md-raw{width:100%;background:var(--secondary);border:0;color:var(--foreground);padding:8px 10px;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;resize:vertical;min-height:84px}
+  .md-raw[hidden]{display:none}
   .td-foot{margin-top:auto;border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--muted-foreground);display:flex;gap:10px;flex-wrap:wrap}
   /* new task dialog — the drawer's flat language, centered */
   #new-wrap{position:fixed;inset:0;z-index:50;display:flex;justify-content:center;align-items:flex-start;padding:11vh 16px 16px}
@@ -511,21 +512,28 @@ function md(src) {
 
 // Prompt files render as markdown with a copy button and a rendered/raw
 // toggle: over plain http on a phone the clipboard API is unavailable, so
-// copy falls back to selecting the raw source in place, and the toggle lets
-// you grab the source by hand any time.
-const mdBlock = (file) => !file ? "" :
-  '<div class="md-block" data-name="' + esc(file.name) + '">' +
+// copy falls back to the raw view — a readonly textarea, whose value is the
+// exact source (soft wraps in it stay presentational, so copied text never
+// picks up line breaks) — and the toggle lets you grab the source by hand.
+const mdBlock = (file) => {
+  if (!file) return "";
+  const rows = Math.max(4, Math.min(String(file.content).split("\n").length + 1, 24));
+  return '<div class="md-block" data-name="' + esc(file.name) + '">' +
     '<div class="md-hd"><span class="hd">' + esc(file.name) + "</span>" +
     '<span class="hr"><button class="btn mini" data-md-raw title="Show the markdown source">raw</button>' +
     '<button class="btn mini" data-md-copy title="Copy the markdown source">copy</button></span></div>' +
     '<div class="md md-rendered">' + md(file.content) + "</div>" +
-    '<pre class="md-raw" hidden>' + esc(file.content) + "</pre>" +
+    '<textarea class="md-raw" readonly rows="' + rows + '" spellcheck="false" hidden>' + esc(file.content) + "</textarea>" +
   "</div>";
+};
 
 async function copyText(text) {
   if (navigator.clipboard && window.isSecureContext) {
     try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through */ }
   }
+  // iOS ignores the hidden-textarea trick and may even report success without
+  // copying — there the raw textarea plus the native Copy menu is the path.
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return false;
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.setAttribute("readonly", "");
@@ -540,16 +548,6 @@ async function copyText(text) {
   return ok;
 }
 
-function selectNode(node) {
-  try {
-    const range = document.createRange();
-    range.selectNodeContents(node);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-  } catch { /* selection is best-effort */ }
-}
-
 function toggleRaw(block) {
   const raw = block.querySelector(".md-raw");
   const rendered = block.querySelector(".md-rendered");
@@ -562,10 +560,11 @@ function toggleRaw(block) {
 
 async function copyBlock(block) {
   const raw = block.querySelector(".md-raw");
-  if (await copyText(raw.textContent)) { toast("copied " + (block.dataset.name || "prompt")); return; }
+  if (await copyText(raw.value)) { toast("copied " + (block.dataset.name || "prompt")); return; }
   if (raw.hidden) toggleRaw(block);
-  selectNode(raw);
-  toast("clipboard blocked — raw selected, tap Copy");
+  raw.focus();
+  try { raw.select(); } catch { /* selection is best-effort */ }
+  toast("clipboard blocked — raw shown, tap Copy");
 }
 
 function drawerHTML(t) {
