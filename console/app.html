@@ -193,6 +193,7 @@
 <script>
 const $ = (s, el = document) => el.querySelector(s);
 let DATA = window.__DATA__ || null;
+const SECTIONS = ["Now", "Next", "Later", "Done"];
 const state = { tab: "board", project: "all", openKey: null };
 let writing = false; // one backlog write at a time
 const pcls = new Map();
@@ -209,7 +210,7 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove("on"), 1600);
 }
 // after a write the server returns a fresh scan — the same shape as
-// /data.json — so sections, indexes, line refs and the drawer stay correct
+// /data.json — so sections, indexes, IDs and the drawer stay correct
 function applyData(data) {
   DATA = data;
   pcls.clear();
@@ -232,6 +233,7 @@ async function postJSON(pathname, payload) {
 }
 function absPath(baseDir, rel) {
   if (!rel) return null;
+  if (rel.startsWith("/")) return rel;
   if (rel.startsWith("~/")) return DATA.home ? DATA.home + rel.slice(1) : null;
   return baseDir ? baseDir + "/" + rel : null;
 }
@@ -242,7 +244,11 @@ function opLink(text, path, tip) {
 
 const filtered = () => state.project === "all" ? DATA.projects : DATA.projects.filter((p) => p.id === state.project);
 const backlogOf = (p) => p.backlog || { Now: [], Next: [], Later: [], Done: [] };
-const backlogRel = (i) => i.file || "docs/backlog.md"; // tooltip for the L<n> ref
+// store items carry a tilde path (~/.onepersonco/<pid>/backlog.md), legacy ones
+// the repo-relative path; the project's backlogFile covers a missing item.file
+const taskFile = (t) => t.file || t.backlogFile || "";
+const migrateHint = (pid, key) => "opc task migrate " + pid + " --key " + (key || "<KEY>");
+const initHint = (pid, key) => "opc task init " + pid + " --key " + (key || "<KEY>");
 const docsOf = (p) => p.docs || [];
 const allDocs = () => filtered().flatMap((p) => docsOf(p).map((d) => ({ ...d, project: p.id, projectPath: p.path })));
 const sessionsOf = (p) => p.promptSessions || [];
@@ -250,15 +256,19 @@ const allSessions = () => filtered().flatMap((p) => sessionsOf(p).map((s) => ({ 
 const worktreesOf = (p) => p.worktrees || [];
 const worktreeCount = () => filtered().reduce((n, p) => n + worktreesOf(p).length, 0);
 
-function chip(id, name, extra) {
+function chip(id, name, extra, tip) {
   return '<span class="chip' + (state.project === id ? " on" : "") + '" data-project="' + id + '">' +
     (id === "all" ? "" : '<span class="dot ' + pclass(id) + '"></span>') + esc(name) +
-    (extra ? ' <span class="tag">' + esc(extra) + "</span>" : "") + "</span>";
+    (extra ? ' <span class="tag"' + (tip ? ' title="' + esc(tip) + '"' : "") + '>' + esc(extra) + "</span>" : "") + "</span>";
 }
 
 function renderChips() {
   $("#chips").innerHTML = chip("all", "All") +
-    DATA.projects.map((p) => chip(p.id, p.id, !p.exists ? "missing" : !p.backlog ? "pending retrofit" : null)).join("");
+    DATA.projects.map((p) => chip(p.id, p.id,
+      !p.exists ? "missing" : !p.backlog ? "no task store" : p.backlogLegacy ? "legacy" : null,
+      !p.exists ? null
+        : !p.backlog ? "no task store yet — run `" + initHint(p.id, p.taskKey) + "`"
+        : p.backlogLegacy ? "legacy repo backlog — run `" + migrateHint(p.id, p.taskKey) + "`" : null)).join("");
 }
 
 function renderTabs() {
@@ -277,15 +287,19 @@ function renderBoard() {
   const pending = filtered().filter((p) => !p.exists || !p.backlog);
   const banner = pending.length
     ? '<div class="banner">' + pending.map((p) => "<b>" + esc(p.id) + "</b>" + (p.exists
-      ? ' — registered, waiting for its retrofit (no <span class="mono">docs/backlog.md</span> yet)'
+      ? ' — registered, no task store yet — run <span class="mono">' + esc(initHint(p.id, p.taskKey)) + "</span>"
       : " — path missing")).join("<br>") + "</div>"
     : "";
   const h = DATA.health;
   const healthBanner = h && h.errors > 0
     ? '<div class="banner">opc check reports <b>' + esc(h.errors) + (Number(h.errors) === 1 ? " error" : " errors") + "</b> — open the Health tab</div>"
     : "";
-  const cols = ["Now", "Next", "Later", "Done"].map((s) => {
-    const items = filtered().flatMap((p) => backlogOf(p)[s].map((i, idx) => ({ ...i, project: p.id, projectPath: p.path, key: p.id + "|" + s + "|" + idx })));
+  const canAdd = LIVE && filtered().some((p) => p.taskStore);
+  const cols = SECTIONS.map((s) => {
+    const items = filtered().flatMap((p) => (backlogOf(p)[s] || []).map((i, idx) => ({
+      ...i, project: p.id, projectPath: p.path, backlogFile: p.backlogFile || null,
+      store: Boolean(i.id && p.taskStore), key: i.id || p.id + "|" + s + "|" + idx,
+    })));
     const cards = items.length ? items.map((i) => {
       const wt = (i.worktrees && i.worktrees.length) ? i.worktrees[0] : null;
       const meta = [
@@ -296,13 +310,17 @@ function renderBoard() {
         wt ? '<span class="tag" title="' + esc(wt.branch || wt.path || "") + '">worktree</span>' : "",
         i.date ? '<span class="tag">' + esc(i.date) + "</span>" : "",
       ].filter(Boolean).join(" ");
-      const lref = '<span class="lref" title="' + esc(backlogRel(i) + " line " + i.line) + '">L' + esc(i.line) + "</span>";
-      return '<div class="card task' + (i.checked ? " done" : "") + '"' + (LIVE ? ' draggable="true"' : "") + ' data-task="' + esc(i.key) + '">' +
+      const lref = '<span class="lref" title="' + esc(taskFile(i) + " line " + i.line) + '">' +
+        (i.id ? esc(i.id) : "L" + esc(i.line)) + "</span>";
+      // only store tasks have a stable ID the server can address; legacy lines
+      // keep the old project|section|index key and stay put
+      return '<div class="card task' + (i.checked ? " done" : "") + '"' +
+        (LIVE && i.store ? ' draggable="true"' : "") + ' data-task="' + esc(i.key) + '">' +
         '<div class="t">' + lref + esc(i.title) + "</div>" +
         (i.desc ? '<div class="d">' + esc(i.desc) + "</div>" : "") +
         '<div class="meta">' + meta + "</div></div>";
     }).join("") : '<div class="empty">—</div>';
-    const addBtn = LIVE ? '<button class="add" data-add-section="' + s + '" title="new task in ' + s + '">+</button>' : "";
+    const addBtn = canAdd ? '<button class="add" data-add-section="' + s + '" title="new task in ' + s + '">+</button>' : "";
     return '<div class="col" data-section="' + s + '"><div class="hd">' + s + " <em>" + items.length + "</em>" + addBtn + "</div>" + cards + "</div>";
   }).join("");
   return healthBanner + banner + '<div class="cols">' + cols + "</div>";
@@ -403,11 +421,35 @@ function renderWorktrees() {
 let closeTimer = null;
 const wrapEl = () => document.getElementById("task-wrap");
 
+// One entry per task per scan: store tasks are keyed by their stable ID, legacy
+// lines by the old project|section|index key. Rebuilt on every render so the
+// drawer and the drag code always resolve against the data on screen.
+let taskIndex = new Map();
+function buildTaskIndex() {
+  taskIndex = new Map();
+  for (const p of DATA.projects) {
+    const backlog = backlogOf(p);
+    for (const s of SECTIONS) {
+      (backlog[s] || []).forEach((item, index) => {
+        const store = Boolean(item.id && p.taskStore);
+        const key = item.id || p.id + "|" + s + "|" + index;
+        taskIndex.set(key, {
+          item, key, pid: p.id, projectPath: p.path, section: s, index, store,
+          taskKey: p.taskKey || null, backlogFile: p.backlogFile || null,
+        });
+      });
+    }
+  }
+}
+
 function taskByKey(key) {
-  const [pid, sec, idx] = String(key).split("|");
-  const p = DATA.projects.find((x) => x.id === pid);
-  const item = p && p.backlog && p.backlog[sec] && p.backlog[sec][Number(idx)];
-  return item ? { ...item, project: p.id, projectPath: p.path, section: sec, index: Number(idx) } : null;
+  const e = taskIndex.get(String(key));
+  if (!e) return null;
+  return {
+    ...e.item, key: e.key, id: e.item.id || null, pid: e.pid,
+    project: e.pid, projectPath: e.projectPath, section: e.section, index: e.index,
+    store: e.store, taskKey: e.taskKey, backlogFile: e.backlogFile,
+  };
 }
 
 // tiny markdown renderer for the prompt briefs and notes: headings, lists,
@@ -584,7 +626,9 @@ function drawerHTML(t) {
       '<div class="td-files">' + pr.files.map((f) => opLink(f, pr.path + "/" + f)).join("") + "</div>" +
       mdBlock(pr.task) +
       mdBlock(pr.notes)
-    : '<div class="empty">no prompt folder linked — add <span class="mono">— prompt: prompts/&lt;folder&gt;</span> to the backlog line</div>') + "</section>";
+    : '<div class="empty">no prompt folder linked — ' + (t.store
+      ? 'attach one with <span class="mono">opc task edit ' + esc(t.id) + ' --prompt prompts/&lt;folder&gt;</span>'
+      : 'add <span class="mono">— prompt: prompts/&lt;folder&gt;</span> to the task line') + "</div>") + "</section>";
   const wtRows = wts.length ? '<div class="list">' + wts.map((w) => {
     const short = home && w.path && w.path.startsWith(home) ? "~" + w.path.slice(home.length) : w.path;
     const state = [w.dirty ? "✎ " + w.dirty : "", w.ahead ? "↑" + w.ahead : "", w.behind ? "↓" + w.behind : ""].filter(Boolean).join(" ");
@@ -592,17 +636,21 @@ function drawerHTML(t) {
     return '<div class="card"><div class="t mono">' + esc(w.branch || "?") + "</div><div class='meta'>" +
       (state ? '<span class="tag">' + esc(state) + "</span>" : "") + prTag + opLink(short || "", w.path, "Open " + w.path) + "</div></div>";
   }).join("") + "</div>" : '<div class="empty">no matched worktree — matching uses the prompt folder slug</div>';
-  const line = t.file ? opLink(t.file + " · line " + t.line, absPath(t.projectPath, t.file)) : "";
-  const lref = '<span class="lref" title="' + esc(backlogRel(t) + " line " + t.line) + '">L' + esc(t.line) + "</span>";
+  const fileRef = taskFile(t);
+  const line = fileRef ? opLink(fileRef + " · line " + t.line, absPath(t.projectPath, fileRef)) : "";
+  const legacyHint = t.store ? "" : '<span>legacy backlog — run <span class="mono">' + esc(migrateHint(t.project, t.taskKey)) + "</span></span>";
+  const ref = t.id
+    ? '<span class="lref" title="' + esc(fileRef + " line " + t.line) + '">' + esc(t.id) + "</span>"
+    : '<span class="lref" title="' + esc(fileRef + " line " + t.line) + '">L' + esc(t.line) + "</span>";
   return '<div class="td-head"><div class="td-crumb"><span class="dot ' + pclass(t.project) + '"></span>' + esc(t.project) + " · " + esc(t.section.toLowerCase()) + '</div>' +
-    (LIVE ? '<button class="btn danger" id="task-cancel" title="Remove this task line from the backlog — git keeps the history">cancel</button>' : "") +
+    (LIVE && t.store ? '<button class="btn danger" id="task-cancel" title="Remove ' + esc(t.id) + ' from the task store — IDs are never reused">cancel</button>' : "") +
     '<button class="btn" id="task-close" title="Close (Esc)">✕</button></div>' +
-    '<div class="td-title' + (t.checked ? " done" : "") + '">' + lref + esc(t.title) + "</div>" +
+    '<div class="td-title' + (t.checked ? " done" : "") + '">' + ref + esc(t.title) + "</div>" +
     (t.desc ? '<div class="td-desc">' + esc(t.desc) + "</div>" : "") +
     '<div class="td-tags">' + tags + "</div>" +
     promptSec +
     '<section class="td-sec"><div class="hd">Worktrees <span class="sub">' + wts.length + "</span></div>" + wtRows + "</section>" +
-    '<div class="td-foot">' + line + "</div>";
+    '<div class="td-foot">' + line + legacyHint + "</div>";
 }
 
 function openTask(key) {
@@ -632,32 +680,24 @@ function closeTask(immediate) {
 
 // ---------------------------------------------------------------- task writes
 
-// Every request carries the raw block exactly as the last scan saw it, and for
-// moves the anchor it lands above. The server verifies both against the file,
-// answers 409 when someone wrote first, and returns a fresh scan when the
-// write landed. If the drawer was open on the moved task it reopens at the
-// task's new position.
+// Writes address tasks by their stable ID and anchors by the ID they land
+// above (null = end of the section). The server re-reads the store under its
+// lock and answers 409 when the project is not migrated; a same-slot drop is a
+// no-op and is filtered client-side. If the drawer was open on the moved task
+// it reopens on the same ID.
 async function moveTask(key, to, anchorKey) {
-  if (writing) return;
+  if (!LIVE || writing) return;
   const t = taskByKey(key);
-  if (!t || !t.block) return;
-  const [pid, sec] = String(key).split("|");
-  let before = null; // null = end of the target section
-  if (anchorKey) {
-    const anchor = taskByKey(anchorKey);
-    if (!anchor || !anchor.block) return;
-    before = { index: anchor.index, block: anchor.block };
-  }
+  if (!t || !t.store) return;
   const reopen = state.openKey === key;
   writing = true;
   try {
-    const out = await postJSON("/task/move", { project: pid, section: sec, index: t.index, to, before, block: t.block });
+    const out = await postJSON("/task/move", { id: t.id, to, before: anchorKey || null });
     if (out.data) applyData(out.data);
-    if (reopen) openTask(out.at ? pid + "|" + out.at.section + "|" + out.at.index : key);
-    toast(sec === to ? "reordered" : "moved to " + to.toLowerCase());
+    if (reopen) openTask(t.id);
+    if (!out.noop) toast(t.section === to ? "reordered" : "moved to " + to.toLowerCase());
   } catch (err) {
-    if (err.status === 409) toast("backlog changed, reload");
-    else toast("move failed — " + err.message);
+    toast("move failed — " + err.message);
   } finally {
     writing = false;
   }
@@ -666,17 +706,15 @@ async function moveTask(key, to, anchorKey) {
 async function cancelTask() {
   const key = state.openKey;
   const t = key && taskByKey(key);
-  if (!t || !t.block || writing) return;
-  if (!confirm('Cancel "' + t.title + '"?\n\nRemoves the task line (and its D: lines) from ' + backlogRel(t) + " · line " + t.line + ".\nGit history keeps the text; the prompt folder stays.")) return;
-  const [pid, sec] = key.split("|");
+  if (!LIVE || !t || !t.store || writing) return;
+  if (!confirm('Cancel "' + t.title + '"?\n\nRemoves ' + t.id + " from " + taskFile(t) + " · line " + t.line + ".\nIDs are never reused; the prompt folder stays.")) return;
   writing = true;
   try {
-    const out = await postJSON("/task/cancel", { project: pid, section: sec, index: t.index, block: t.block });
+    const out = await postJSON("/task/cancel", { id: t.id });
     if (out.data) applyData(out.data);
-    toast("task canceled");
+    toast("canceled " + t.id);
   } catch (err) {
-    if (err.status === 409) toast("backlog changed, reload");
-    else toast("cancel failed — " + err.message);
+    toast("cancel failed — " + err.message);
   } finally {
     writing = false;
   }
@@ -684,12 +722,13 @@ async function cancelTask() {
 
 // ---------------------------------------------------------------- drag & drop
 
-// Cards are draggable in live mode only. The drop lands at the card under the
-// pointer (top half = above it, bottom half = below it); with no anchor card
-// the block goes to the top of its section. One column holds several
-// projects and line order is per project, so the anchor is always the nearest
-// card of the dragged task's own project — the marker shows exactly where the
-// block will land. Dropping a card back into its own slot is a no-op.
+// Cards are draggable in live mode only, and only store tasks (legacy lines
+// have no stable ID to address). The drop lands at the card under the pointer
+// (top half = above it, bottom half = below it); with no anchor card the task
+// goes to the end of its section. One column holds several projects and each
+// project owns its own store, so the anchor is always the nearest card of the
+// dragged task's own project — the marker shows exactly where it will land.
+// Dropping a card back into its own slot is a no-op.
 let dragKey = null;
 
 function clearDropMarker(scope) {
@@ -704,11 +743,11 @@ function clearDragState() {
   clearDropMarker(document);
 }
 
-// Where a drop at clientY would land: q = position among the dragged
-// project's cards in this column (the dragged card itself excluded),
+// Where a drop at clientY would land: q = position among the dragged task's
+// project cards in this column (the dragged card itself excluded),
 // remaining = those cards' keys in visual order.
 function dropTarget(col, clientY, key) {
-  const pid = String(key).split("|")[0];
+  const t = taskByKey(key);
   const cards = [...col.querySelectorAll(".card.task")];
   let boundary = cards.length;
   for (let i = 0; i < cards.length; i++) {
@@ -719,7 +758,8 @@ function dropTarget(col, clientY, key) {
   let q = 0;
   cards.forEach((c, i) => {
     const k = c.dataset.task;
-    if (!k.startsWith(pid + "|") || k === key) return;
+    const ct = taskByKey(k);
+    if (!t || !ct || ct.pid !== t.pid || k === key) return;
     if (i < boundary) q++;
     remaining.push(k);
   });
@@ -728,18 +768,21 @@ function dropTarget(col, clientY, key) {
 
 function showDropMarker(col, clientY, key) {
   clearDropMarker(col);
-  const [pid, sec, idx] = String(key).split("|");
+  const t = taskByKey(key);
+  if (!t) return;
   const { q, remaining } = dropTarget(col, clientY, key);
-  if (col.dataset.section === sec && q === Number(idx)) return; // own slot
-  if (!remaining.length) return; // no anchor card: only position is the top
+  if (col.dataset.section === t.section && q === t.index) return; // own slot
+  if (!remaining.length) return; // no anchor card: it can only land at the end
   const anchorKey = remaining[q < remaining.length ? q : remaining.length - 1];
-  const el = col.querySelector('.card.task[data-task="' + anchorKey + '"]');
+  const el = [...col.querySelectorAll(".card.task")].find((c) => c.dataset.task === anchorKey);
   if (el) el.classList.add(q < remaining.length ? "drop-before" : "drop-after");
 }
 
 document.addEventListener("dragstart", (e) => {
   const card = LIVE && e.target.closest && e.target.closest(".card.task[data-task]");
-  if (!card) return;
+  if (!card || card.getAttribute("draggable") !== "true") return;
+  const t = taskByKey(card.dataset.task);
+  if (!t || !t.store) return;
   dragKey = card.dataset.task;
   card.classList.add("dragging");
   if (e.dataTransfer) {
@@ -776,28 +819,34 @@ document.addEventListener("drop", (e) => {
   e.preventDefault();
   const key = dragKey;
   const to = col.dataset.section;
+  const t = taskByKey(key);
   const { q, remaining } = dropTarget(col, e.clientY, key);
   clearDragState();
-  const [, sec, idx] = String(key).split("|");
-  if (sec === to && q === Number(idx)) return; // own slot: no-op
+  if (!t || !t.store) return;
+  if (t.section === to && q === t.index) return; // own slot: no-op
   moveTask(key, to, q < remaining.length ? remaining[q] : null);
 });
 
 // ---------------------------------------------------------------- new task
 
 // The dialog mirrors the board's filters (the active project chip preselects
-// the project) and writes through the same guarded path: the server composes
-// the backlog line, resolves spec:/prompt: like `opc check` does, and returns
-// a fresh scan. New tasks land on top of their section — drag from there.
+// the project, the clicked column preselects the section) and writes through
+// the same guarded path: the server allocates the ID, resolves spec:/prompt:
+// like `opc check` does, and returns a fresh scan. Only migrated projects are
+// offered; with none, the dialog explains the migration instead of failing.
 let newTimer = null;
 const nfErr = () => document.getElementById("nf-error");
+const storeProjects = () => DATA ? DATA.projects.filter((p) => p.taskStore) : [];
 
 function openNew(preSection) {
   if (!LIVE || !DATA) return;
-  const projects = DATA.projects.filter((p) => p.backlog);
+  const projects = storeProjects();
   const sel = $("#nf-project");
-  sel.innerHTML = '<option value="" disabled>choose…</option>' +
-    projects.map((p) => '<option value="' + esc(p.id) + '">' + esc(p.id) + "</option>").join("");
+  sel.innerHTML = projects.length
+    ? '<option value="" disabled>choose…</option>' +
+      projects.map((p) => '<option value="' + esc(p.id) + '">' + esc(p.id) + "</option>").join("")
+    : '<option value="">no task store yet</option>';
+  sel.disabled = !projects.length;
   sel.value = state.project !== "all" && projects.some((p) => p.id === state.project) ? state.project
     : projects.length === 1 ? projects[0].id
     : "";
@@ -807,12 +856,13 @@ function openNew(preSection) {
   $("#nf-desc").value = "";
   $("#nf-spec").value = "";
   $("#nf-prompt").value = "";
-  nfErr().textContent = "";
+  nfErr().textContent = projects.length ? "" : "no task store yet — run `opc task init <project> --key <KEY>` first";
+  $("#new-create").disabled = !projects.length;
   clearTimeout(newTimer);
   const w = document.getElementById("new-wrap");
   w.hidden = false;
   requestAnimationFrame(() => w.classList.add("on"));
-  $("#nf-title").focus();
+  if (projects.length) $("#nf-title").focus();
 }
 
 function closeNew(immediate) {
@@ -826,6 +876,10 @@ function closeNew(immediate) {
 
 async function createTask() {
   if (writing || !LIVE) return;
+  if (!storeProjects().length) {
+    nfErr().textContent = "no task store yet — run `opc task init <project> --key <KEY>` first";
+    return;
+  }
   const title = $("#nf-title").value.trim();
   const pid = $("#nf-project").value;
   if (!title) { nfErr().textContent = "a title is required"; $("#nf-title").focus(); return; }
@@ -845,7 +899,7 @@ async function createTask() {
     const out = await postJSON("/task/add", payload);
     closeNew();
     if (out.data) applyData(out.data);
-    toast("added to " + payload.section.toLowerCase());
+    toast(out.id ? "added " + out.id : "added to " + payload.section.toLowerCase());
   } catch (err) {
     nfErr().textContent = err.message;
   } finally {
@@ -864,6 +918,7 @@ function renderFoot() {
 function render() {
   if (!DATA) return;
   closeTask(true);
+  buildTaskIndex();
   $("#gen").textContent = "generated " + new Date(DATA.generatedAt).toLocaleString();
   if (state.tab === "health" && !DATA.health) state.tab = "board";
   renderChips();

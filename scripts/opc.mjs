@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// opc — the One Person Company CLI (alpha): sync · check · scan · console
+// opc — the One Person Company CLI (alpha): sync · check · scan · console · task
 //
 // sync   compose standards fragments (core + matching platforms) into standardized projects
 // check  deterministic health checks for every registered project
 // scan   write console/data.json (+ --snapshot for a self-contained page)
 // console serve the local console; /data.json rescans on every load, and
-//         /task/add + /task/move + /task/cancel edit backlogs behind guards
+//         /task/add + /task/move + /task/cancel edit the task store behind locks
+// task   control-plane task store: add, list, show, move, done, cancel, migrate
+
 
 import fs from "node:fs";
 import path from "node:path";
@@ -22,10 +24,13 @@ const consoleDir = path.join(HUB, "console");
 
 const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
 const SECTIONS = ["Now", "Next", "Later", "Done"];
-// Backlog line grammar, shared by parseBacklog (read) and the console write
-// endpoints — both must agree on where a task line and its `D:` lines end.
+// Backlog line grammar, shared by parseBacklog (read) and the task store
+// (write) — both must agree on where a task line and its `D:` lines end.
 const TASK_LINE_RE = /^-\s+\[( |x|X)\]\s+(.+)$/;
 const DESC_LINE_RE = /^\s+(?:d|desc):\s*(.+?)\s*$/i;
+// Stable task IDs: `KEY-12 · Title`. The key lives in projects.json.
+const TASK_ID_RE = /^([A-Z][A-Z0-9]{1,5}-\d+)\s+·\s+/;
+const TASK_KEY_RE = /^[A-Z][A-Z0-9]{1,5}$/;
 
 // ---------------------------------------------------------------- target
 
@@ -455,10 +460,13 @@ function parseBacklog(file) {
     const item = line.match(TASK_LINE_RE);
     if (item) {
       let rest = item[2].trim();
+      let id = null;
       let spec = null;
       let prompt = null;
       let priority = null;
       let date = null;
+      const idM = rest.match(TASK_ID_RE);
+      if (idM) { id = idM[1]; rest = rest.slice(idM[0].length); }
       const specM = rest.match(/\s+—\s+spec:\s+(\S+)/);
       if (specM) { spec = specM[1]; rest = rest.replace(specM[0], ""); }
       const promptM = rest.match(/\s+—\s+prompt:\s+(\S+)/);
@@ -468,6 +476,7 @@ function parseBacklog(file) {
       const dateM = rest.match(/\s+—\s+(\d{4}-\d{2}-\d{2})\s*$/);
       if (dateM) { date = dateM[1]; rest = rest.replace(dateM[0], ""); }
       last = {
+        id,
         title: rest.trim(),
         desc: null,
         spec,
@@ -476,7 +485,6 @@ function parseBacklog(file) {
         date,
         checked: item[1].toLowerCase() === "x",
         line: i + 1,
-        block: [line], // raw task line + D: lines, byte-exact for write-back guards
       };
       sections[current].push(last);
       return;
@@ -486,7 +494,6 @@ function parseBacklog(file) {
     const desc = last && line.match(DESC_LINE_RE);
     if (desc) {
       last.desc = last.desc ? `${last.desc} ${desc[1]}` : desc[1];
-      last.block.push(line);
       return;
     }
     last = null;
@@ -634,9 +641,14 @@ function scanProject(p) {
     worktrees: [],
   };
   if (!exists) return entry;
-  entry.backlog = parseBacklog(path.join(docsDir, "backlog.md"));
+  const source = backlogSource(p);
+  entry.backlog = source ? parseBacklog(source.file) : null;
+  entry.taskStore = Boolean(source && !source.legacy);
+  entry.backlogLegacy = Boolean(source && source.legacy);
+  entry.backlogFile = source ? displayFile(source.file) : null;
+  entry.taskKey = p.key || null;
   if (entry.backlog) {
-    const backlogRel = path.relative(dir, path.join(docsDir, "backlog.md"));
+    const backlogRel = source.legacy ? path.relative(dir, source.file) : displayFile(source.file);
     for (const s of SECTIONS) {
       for (const item of entry.backlog[s]) {
         item.file = backlogRel;
@@ -749,13 +761,15 @@ function countFiles(dir) {
 }
 
 function checkBacklog(p, dir, add) {
-  const docsDir = path.join(dir, p.docs || "docs");
-  const file = path.join(docsDir, "backlog.md");
-  if (!fs.existsSync(file)) {
-    if (!p.standardized) add("info", "backlog.missing", "no docs/backlog.md");
+  const source = backlogSource(p);
+  if (!source) {
+    if (!p.standardized) add("info", "backlog.missing", "no task store or docs/backlog.md");
     return;
   }
-  const rel = path.relative(dir, file);
+  const file = source.file;
+  const rel = source.legacy ? path.relative(dir, file) : displayFile(file);
+  if (source.legacy)
+    add("info", "backlog.legacy", `backlog still lives in the repo — run \`opc task migrate ${p.id} --key ${p.key || "<KEY>"}\``, rel);
   const counts = Object.fromEntries(SECTIONS.map((s) => [s, 0]));
   const malformed = [];
   let current = null;
@@ -774,13 +788,36 @@ function checkBacklog(p, dir, add) {
   }
   for (const line of malformed) add("error", "backlog.line", `line ${line}: malformed task line (expected \`- [ ] Title\`)`, rel);
   const backlog = parseBacklog(file);
-  for (const s of ["Now", "Next", "Later"]) {
-    for (const item of backlog[s]) {
-      if (item.checked) add("warning", "backlog.finished-in-lane", `checked item in ${s}: ${item.title}`, rel);
+  if (!source.legacy) {
+    if (!p.key || !TASK_KEY_RE.test(p.key)) add("error", "backlog.key", "missing or invalid task key in projects.json", "projects.json");
+    const meta = readMeta(p);
+    const max = maxIdNumber(backlog, p.key || "");
+    if (p.key && (!Number.isInteger(meta.next) || meta.next <= max))
+      add("error", "backlog.meta", `backlog.meta.json next (${meta.next}) must exceed the highest ID (${max})`, rel);
+    const seenIds = new Set();
+    for (const s of SECTIONS) {
+      for (const item of backlog[s]) {
+        if (!item.id) { add("error", "backlog.id", `line ${item.line}: task has no ID`, rel); continue; }
+        if (p.key && !item.id.startsWith(`${p.key}-`))
+          add("error", "backlog.id", `line ${item.line}: ${item.id} does not match key ${p.key}`, rel);
+        if (seenIds.has(item.id)) add("error", "backlog.id", `duplicate task ID ${item.id}`, rel);
+        seenIds.add(item.id);
+      }
     }
   }
+  const openTitles = new Map();
   for (const s of SECTIONS) {
     for (const item of backlog[s]) {
+      if (s !== "Done" && item.checked)
+        add("warning", "backlog.finished-in-lane", `checked item in ${s}: ${item.title}`, rel);
+      if (s === "Done" && item.checked && !item.date)
+        add("warning", "backlog.done-date", `done without a date: ${item.id || item.title}`, rel);
+      if (s !== "Done") {
+        const norm = normalizeTitle(item.title);
+        if (openTitles.has(norm))
+          add("warning", "backlog.duplicate", `duplicate open title: ${item.id || item.title}`, rel);
+        else openTitles.set(norm, item);
+      }
       if (item.spec) {
         const target = item.spec.startsWith("~/") ? expand(item.spec) : path.resolve(dir, item.spec);
         if (!fs.existsSync(target)) add("error", "backlog.spec", `spec does not resolve: ${item.spec}`, rel);
@@ -861,9 +898,17 @@ function checkProject(p, fragments, dir = expand(p.path)) {
 function checkAll() {
   const checkedAt = new Date().toISOString();
   const findings = [];
+  const keys = new Map();
+  const cross = [];
+  for (const p of registry.projects) {
+    if (!p.key) continue;
+    if (keys.has(p.key)) cross.push({ project: p.id, level: "error", code: "backlog.key", message: `task key ${p.key} is already used by ${keys.get(p.key)}` });
+    else keys.set(p.key, p.id);
+  }
   const perProject = new Map();
   for (const p of registry.projects) {
     const list = checkProject(p, loadProjectFragments(p));
+    list.push(...cross.filter((f) => f.project === p.id));
     findings.push(...list);
     perProject.set(p.id, healthOf(list, checkedAt));
   }
@@ -914,40 +959,538 @@ function cmdCheck(args) {
 
 // ---------------------------------------------------------------- console
 
-// The console is read-only except for three local actions: adding a task,
-// moving a task line between sections (or repositioning it inside one) and
-// canceling it. Every write names the project and the section it touches;
-// moves and cancels also name the item index and the block exactly as the
-// last scan saw it, and a move may name the item it lands above (`before`,
-// null = end of the section). Every named block is verified byte-for-byte; a
-// block that no longer matches the file — an agent or another window wrote
-// first — answers 409. The server resolves the file from the registry (never
-// from client paths), re-reads it and edits raw lines, so untouched bytes
-// stay untouched. Additions resolve `spec:` and `prompt:` exactly like
-// `opc check` does, so a task the console accepts never breaks the check.
+// ---------------------------------------------------------------- task store
 
-function backlogFile(project) {
-  return path.join(expand(project.path), project.docs || "docs", "backlog.md");
+// Task state is control-plane data, not code: one writer, stable IDs, no
+// branches. `~/.onepersonco/<project>/backlog.md` is canonical; a repo
+// `docs/backlog.md` is a read-only legacy fallback until `opc task migrate`
+// moves it. Every mutation takes a lock, re-reads the file, edits raw lines
+// and writes atomically, so the console server and the CLI never interleave.
+// IDs are allocated here and nowhere else: KEY-N, increasing, never reused.
+
+function storeDir(id) { return path.join(expand(registry.scratchRoot), id); }
+function storeFile(p) { return path.join(storeDir(p.id), "backlog.md"); }
+function metaFile(p) { return path.join(storeDir(p.id), "backlog.meta.json"); }
+function repoBacklogFile(p) { return path.join(expand(p.path), p.docs || "docs", "backlog.md"); }
+
+function backlogSource(p) {
+  const store = storeFile(p);
+  if (fs.existsSync(store)) return { file: store, legacy: false };
+  const repo = repoBacklogFile(p);
+  if (fs.existsSync(repo)) return { file: repo, legacy: true };
+  return null;
 }
 
-// Block extent of task `index` in `section`: same walk as parseBacklog.
-// Returns { start, end } as inclusive line indices, or null.
-function locateTask(lines, section, index) {
+// Tilde-shortened absolute path for display and the console's /open links.
+function displayFile(file) {
+  const home = os.homedir();
+  return file.startsWith(home + path.sep) ? "~/" + path.relative(home, file) : file;
+}
+
+function readMeta(p) {
+  try { return JSON.parse(fs.readFileSync(metaFile(p), "utf8")); } catch { return {}; }
+}
+
+function writeMeta(p, meta) {
+  fs.mkdirSync(storeDir(p.id), { recursive: true });
+  writeAtomic(metaFile(p), JSON.stringify(meta, null, 2) + "\n");
+}
+
+function writeAtomic(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file);
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The console server and the CLI are separate processes; both mutate through
+// this lock (stale after 10s) and an atomic rename, so they may run at once.
+async function withTaskLock(p, fn) {
+  fs.mkdirSync(storeDir(p.id), { recursive: true });
+  const lock = path.join(storeDir(p.id), "backlog.lock");
+  for (let tries = 0; tries < 120; tries++) {
+    try {
+      const fd = fs.openSync(lock, "wx");
+      fs.writeSync(fd, `${process.pid} ${Date.now()}`);
+      fs.closeSync(fd);
+      try {
+        return await fn();
+      } finally {
+        try { fs.unlinkSync(lock); } catch { /* already gone */ }
+      }
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+      try {
+        if (Date.now() - fs.statSync(lock).mtimeMs > 10_000) { fs.unlinkSync(lock); continue; }
+      } catch { /* lock raced away */ }
+      await sleep(40);
+    }
+  }
+  throw new Error("task store is locked by another writer");
+}
+
+function readLines(file) {
+  const text = fs.readFileSync(file, "utf8");
+  const endsNL = text.endsWith("\n");
+  const lines = text.split("\n");
+  if (endsNL) lines.pop();
+  return { lines, endsNL };
+}
+
+function writeLines(file, lines, endsNL) {
+  writeAtomic(file, lines.join("\n") + (endsNL ? "\n" : ""));
+}
+
+// Every task block in file order, with its section position.
+function listTasks(lines) {
+  const out = [];
+  const counts = Object.fromEntries(SECTIONS.map((s) => [s, 0]));
   let current = null;
-  let n = 0; // item position within `section`, walked exactly like parseBacklog
   for (let i = 0; i < lines.length; i++) {
     const h = lines[i].match(/^##\s+(.+)$/);
     if (h) {
       current = SECTIONS.find((s) => h[1].trim().toLowerCase().startsWith(s.toLowerCase())) || null;
       continue;
     }
-    if (current !== section || !TASK_LINE_RE.test(lines[i])) continue;
-    if (n++ !== index) continue;
+    if (!current || !TASK_LINE_RE.test(lines[i])) continue;
     let end = i;
     while (end + 1 < lines.length && DESC_LINE_RE.test(lines[end + 1])) end++;
-    return { start: i, end };
+    out.push({ section: current, index: counts[current]++, start: i, end, line: lines[i] });
+    i = end;
+  }
+  return out;
+}
+
+function taskIdOf(line) {
+  const m = line.match(TASK_LINE_RE);
+  const idm = m && m[2].match(TASK_ID_RE);
+  return idm ? idm[1] : null;
+}
+
+function maxIdNumber(backlog, key) {
+  let max = 0;
+  for (const s of SECTIONS) {
+    for (const item of backlog[s]) {
+      if (!item.id || !item.id.startsWith(`${key}-`)) continue;
+      max = Math.max(max, Number(item.id.slice(key.length + 1)) || 0);
+    }
+  }
+  return max;
+}
+
+const normalizeTitle = (title) => String(title).toLowerCase().replace(/\s+/g, " ").trim();
+const taskLine = (id, title) => `- [ ] ${id} · ${title}`;
+
+function findTask(backlog, id) {
+  for (const s of SECTIONS) {
+    const index = backlog[s].findIndex((item) => item.id === id);
+    if (index >= 0) return { section: s, index, task: backlog[s][index] };
   }
   return null;
+}
+
+function findProjectById(id) {
+  const key = String(id || "").split("-")[0];
+  return registry.projects.find((p) => p.key === key) || null;
+}
+
+function requireStore(p) {
+  const file = storeFile(p);
+  if (fs.existsSync(file)) return file;
+  if (fs.existsSync(repoBacklogFile(p)))
+    throw new Error(`not migrated: run opc task migrate ${p.id} --key ${p.key || "<KEY>"}`);
+  throw new Error(`no task store for ${p.id} — run opc task migrate ${p.id} --key ${p.key || "<KEY>"}`);
+}
+
+function validateAdd(p, fields) {
+  const title = String(fields.title || "").trim();
+  if (!title || title.includes("\n") || /\s+—\s+(spec|prompt):\s/.test(title))
+    throw new Error("title must be a single line without `— spec:` / `— prompt:` markers");
+  if (fields.priority && !/^[pP][0-3]$/.test(fields.priority)) throw new Error("priority must be p0..p3");
+  if (fields.spec) {
+    if (/\s/.test(fields.spec)) throw new Error("spec must be a path without spaces");
+    const target = fields.spec.startsWith("~/") ? expand(fields.spec) : path.resolve(expand(p.path), fields.spec);
+    if (!fs.existsSync(target)) throw new Error(`spec does not resolve: ${fields.spec}`);
+  }
+  if (fields.prompt) {
+    if (/\s/.test(fields.prompt)) throw new Error("prompt must be a folder without spaces");
+    if (!resolvePrompt(p.id, fields.prompt)) throw new Error(`prompt does not resolve: ${fields.prompt}`);
+  }
+  return title;
+}
+
+async function taskAdd(p, fields) {
+  if (!p.key || !TASK_KEY_RE.test(p.key))
+    throw new Error(`project ${p.id} has no task key — add "key": "ABC" to projects.json`);
+  const title = validateAdd(p, fields);
+  const section = fields.section || "Now";
+  if (!SECTIONS.includes(section)) throw new Error(`unknown section: ${section}`);
+  return withTaskLock(p, () => {
+    const file = requireStore(p);
+    const { lines, endsNL } = readLines(file);
+    const backlog = parseBacklog(file);
+    for (const s of ["Now", "Next", "Later"]) {
+      for (const item of backlog[s]) {
+        if (normalizeTitle(item.title) === normalizeTitle(title))
+          throw new Error(`duplicate: ${item.id || item.title} already has that title`);
+      }
+    }
+    const meta = readMeta(p);
+    const id = `${p.key}-${Math.max(Number(meta.next) || 1, maxIdNumber(backlog, p.key) + 1)}`;
+    let line = taskLine(id, title);
+    if (fields.spec) line += ` — spec: ${fields.spec}`;
+    if (fields.prompt) line += ` — prompt: ${fields.prompt}`;
+    if (fields.priority) line += ` — ${String(fields.priority).toLowerCase()}`;
+    if (section === "Done") line = toDone(line);
+    const block = [line, ...String(fields.desc || "").split("\n")
+      .map((d) => d.trim().replace(/^(?:d|desc):\s*/i, "")).filter(Boolean)
+      .map((d) => `  D: ${d}`)];
+    const at = insertItem(lines, section, 0, block);
+    if (at === false) throw new Error(`backlog has no "## ${section}" section`);
+    writeLines(file, lines, endsNL);
+    writeMeta(p, { ...meta, key: p.key, next: Number(id.slice(p.key.length + 1)) + 1 });
+    return { id, section, index: at };
+  });
+}
+
+async function taskMove(p, id, to, before) {
+  if (!SECTIONS.includes(to)) throw new Error(`unknown section: ${to}`);
+  return withTaskLock(p, () => {
+    const file = requireStore(p);
+    const { lines, endsNL } = readLines(file);
+    const tasks = listTasks(lines);
+    const from = tasks.find((t) => taskIdOf(t.line) === id);
+    if (!from) throw new Error(`task not found: ${id}`);
+    let anchor = null;
+    if (before !== undefined && before !== null) {
+      if (before === id) throw new Error("cannot anchor a task on itself");
+      anchor = tasks.find((t) => taskIdOf(t.line) === before);
+      if (!anchor) throw new Error(`task not found: ${before}`);
+      if (anchor.section !== to) throw new Error(`${before} is not in ${to}`);
+    }
+    const target = tasks.filter((t) => t.section === to);
+    const current = from.section === to ? target.indexOf(from) : -1;
+    let k;
+    if (before === undefined) k = 0;
+    else if (before === null) k = from.section === to ? target.length - 1 : target.length;
+    else k = target.indexOf(anchor);
+    if (from.section === to) {
+      if (before === undefined && current === 0) return { noop: true };
+      if (before === null && current === target.length - 1) return { noop: true };
+      if (anchor) {
+        const a = target.indexOf(anchor);
+        k = a > current ? a - 1 : a;
+        if (k === current) return { noop: true };
+      }
+    }
+    let line = from.line;
+    if (to === "Done" && from.section !== "Done") line = toDone(line);
+    else if (to !== "Done" && from.section === "Done") line = fromDone(line);
+    lines.splice(from.start, from.end - from.start + 1);
+    if (lines[from.start - 1] !== undefined && lines[from.start - 1].trim() === "" &&
+        lines[from.start] !== undefined && lines[from.start].trim() === "")
+      lines.splice(from.start, 1);
+    const at = insertItem(lines, to, k, [line]);
+    if (at === false) throw new Error(`backlog has no "## ${to}" section`);
+    writeLines(file, lines, endsNL);
+    return { section: to, index: at };
+  });
+}
+
+async function taskCancel(p, id) {
+  return withTaskLock(p, () => {
+    const file = requireStore(p);
+    const { lines, endsNL } = readLines(file);
+    const found = listTasks(lines).find((t) => taskIdOf(t.line) === id);
+    if (!found) throw new Error(`task not found: ${id}`);
+    lines.splice(found.start, found.end - found.start + 1);
+    if (lines[found.start - 1] !== undefined && lines[found.start - 1].trim() === "" &&
+        lines[found.start] !== undefined && lines[found.start].trim() === "")
+      lines.splice(found.start, 1);
+    writeLines(file, lines, endsNL);
+  });
+}
+
+async function taskEdit(p, id, fields) {
+  return withTaskLock(p, () => {
+    const file = requireStore(p);
+    const { lines, endsNL } = readLines(file);
+    const found = listTasks(lines).find((t) => taskIdOf(t.line) === id);
+    if (!found) throw new Error(`task not found: ${id}`);
+    const backlog = parseBacklog(file);
+    const current = findTask(backlog, id);
+    if (!current) throw new Error(`task not found: ${id}`);
+    const cur = current.task;
+    const title = fields.title !== undefined ? String(fields.title).trim() : cur.title;
+    if (!title || title.includes("\n") || /\s+—\s+(spec|prompt):\s/.test(title))
+      throw new Error("title must be a single line without `— spec:` / `— prompt:` markers");
+    if (fields.title !== undefined) {
+      for (const s of ["Now", "Next", "Later"]) {
+        for (const item of backlog[s]) {
+          if (item.id !== id && normalizeTitle(item.title) === normalizeTitle(title))
+            throw new Error(`duplicate: ${item.id || item.title} already has that title`);
+        }
+      }
+    }
+    const priority = fields.priority !== undefined ? (String(fields.priority).toLowerCase() || null) : cur.priority;
+    if (priority && !/^p[0-3]$/.test(priority)) throw new Error("priority must be p0..p3");
+    const spec = fields.spec !== undefined ? (String(fields.spec) || null) : cur.spec;
+    if (spec) {
+      if (/\s/.test(spec)) throw new Error("spec must be a path without spaces");
+      const target = spec.startsWith("~/") ? expand(spec) : path.resolve(expand(p.path), spec);
+      if (!fs.existsSync(target)) throw new Error(`spec does not resolve: ${spec}`);
+    }
+    const prompt = fields.prompt !== undefined ? (String(fields.prompt) || null) : cur.prompt;
+    if (prompt) {
+      if (/\s/.test(prompt)) throw new Error("prompt must be a folder without spaces");
+      if (!resolvePrompt(p.id, prompt)) throw new Error(`prompt does not resolve: ${prompt}`);
+    }
+    const box = cur.checked ? "[x]" : "[ ]";
+    let line = `- ${box} ${id} · ${title}`;
+    if (spec) line += ` — spec: ${spec}`;
+    if (prompt) line += ` — prompt: ${prompt}`;
+    if (priority) line += ` — ${priority}`;
+    if (cur.date) line += ` — ${cur.date}`;
+    lines[found.start] = line;
+    if (fields.desc !== undefined) {
+      const block = String(fields.desc || "").split("\n")
+        .map((d) => d.trim().replace(/^(?:d|desc):\s*/i, "")).filter(Boolean)
+        .map((d) => `  D: ${d}`);
+      lines.splice(found.start + 1, found.end - found.start, ...block);
+    }
+    writeLines(file, lines, endsNL);
+    return { id };
+  });
+}
+
+async function taskDone(p, id, pr) {
+  const file = requireStore(p);
+  const found = findTask(parseBacklog(file), id);
+  if (!found) throw new Error(`task not found: ${id}`);
+  let result = { section: found.section, index: found.index };
+  if (found.section === "Done") {
+    if (found.task.checked && found.task.date) {
+      result = { noop: true };
+    } else {
+      result = await withTaskLock(p, () => {
+        const { lines, endsNL } = readLines(file);
+        const t = listTasks(lines).find((x) => taskIdOf(x.line) === id);
+        if (!t) throw new Error(`task not found: ${id}`);
+        lines[t.start] = toDone(t.line);
+        writeLines(file, lines, endsNL);
+        return { section: "Done", index: found.index };
+      });
+    }
+  } else {
+    result = await taskMove(p, id, "Done", undefined);
+  }
+  if (pr) {
+    await withTaskLock(p, () => {
+      const meta = readMeta(p);
+      meta.key = p.key;
+      meta.prs = { ...(meta.prs || {}), [id]: pr };
+      writeMeta(p, meta);
+    });
+  }
+  return result;
+}
+
+function taskList(p, section) {
+  if (section && !SECTIONS.includes(section)) throw new Error(`unknown section: ${section}`);
+  const source = backlogSource(p);
+  if (!source) throw new Error(`no task store for ${p.id}`);
+  const backlog = parseBacklog(source.file);
+  const out = [];
+  for (const s of SECTIONS) {
+    if (section && s !== section) continue;
+    for (const item of backlog[s]) out.push({ ...item, section: s, legacy: source.legacy });
+  }
+  return out;
+}
+
+function taskShow(id) {
+  const p = findProjectById(id);
+  if (!p) throw new Error(`task not found: ${id}`);
+  const item = taskList(p).find((t) => t.id === id);
+  if (!item) throw new Error(`task not found: ${id}`);
+  return { project: p, item, source: backlogSource(p) };
+}
+
+async function taskMigrate(projectId, keyArg, dryRun) {
+  if (!projectId) throw new Error("usage: opc task migrate <project> --key <KEY> [--dry-run]");
+  const p = registry.projects.find((x) => x.id === projectId);
+  if (!p) throw new Error(`unknown project: ${projectId}`);
+  if (!fs.existsSync(repoBacklogFile(p))) throw new Error(`${p.id}: no docs/backlog.md to migrate`);
+  if (fs.existsSync(storeFile(p))) throw new Error(`${p.id}: task store already exists — ${displayFile(storeFile(p))}`);
+  const key = String(keyArg || p.key || "").toUpperCase();
+  if (!TASK_KEY_RE.test(key)) throw new Error("choose a task key, e.g. --key GYM (2-6 letters/digits, starting with a letter)");
+  const other = registry.projects.find((x) => x.key === key && x.id !== p.id);
+  if (other) throw new Error(`key ${key} is already used by ${other.id}`);
+  const { lines, endsNL } = readLines(repoBacklogFile(p));
+  let n = 0;
+  const migrated = lines.map((line) => {
+    const m = line.match(/^(-\s+\[( |x|X)\]\s+)(.+)$/);
+    if (!m) return line;
+    if (TASK_ID_RE.test(m[3])) throw new Error(`line already has an ID: ${line}`);
+    n++;
+    return `${m[1]}${key}-${n} · ${m[3]}`;
+  });
+  if (dryRun) return { project: p.id, key, count: n, file: displayFile(storeFile(p)), dryRun: true };
+  fs.mkdirSync(storeDir(p.id), { recursive: true });
+  writeLines(storeFile(p), migrated, endsNL);
+  writeMeta(p, { key, next: n + 1 });
+  if (p.key !== key) {
+    p.key = key;
+    fs.writeFileSync(path.join(HUB, "projects.json"), JSON.stringify(registry, null, 2) + "\n");
+  }
+  return { project: p.id, key, count: n, file: displayFile(storeFile(p)) };
+}
+
+async function taskInit(p, keyArg) {
+  const key = String(keyArg || p.key || "").toUpperCase();
+  if (!TASK_KEY_RE.test(key)) throw new Error("choose a task key, e.g. --key BLO (2-6 letters/digits, starting with a letter)");
+  const other = registry.projects.find((x) => x.key === key && x.id !== p.id);
+  if (other) throw new Error(`key ${key} is already used by ${other.id}`);
+  return withTaskLock(p, () => {
+    if (fs.existsSync(storeFile(p)))
+      throw new Error(`${p.id}: task store already exists — ${displayFile(storeFile(p))}`);
+    const lines = [
+      "# Backlog", "",
+      `Task store for ${p.id}. Written by \`opc task\` and the console only.`,
+      "Sections: Now · Next · Later · Done (recent).", "",
+      "## Now", "", "## Next", "", "## Later", "", "## Done (recent)", "",
+    ];
+    writeLines(storeFile(p), lines, true);
+    writeMeta(p, { key, next: 1 });
+    if (p.key !== key) {
+      p.key = key;
+      fs.writeFileSync(path.join(HUB, "projects.json"), JSON.stringify(registry, null, 2) + "\n");
+    }
+    return { project: p.id, key, file: displayFile(storeFile(p)) };
+  });
+}
+
+function parseTaskArgs(argv) {
+  const pos = [];
+  const flags = { desc: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--json" || arg === "--dry-run" || arg === "--top" || arg === "--end") {
+      flags[arg.slice(2)] = true;
+    } else if (arg.startsWith("--")) {
+      const name = arg.slice(2);
+      const value = argv[++i];
+      if (value === undefined) throw new Error(`missing value for --${name}`);
+      if (name === "desc") flags.desc.push(value);
+      else flags[name] = value;
+    } else {
+      pos.push(arg);
+    }
+  }
+  return { pos, flags };
+}
+
+const projectOf = (id) => {
+  const p = registry.projects.find((x) => x.id === id);
+  if (!p) throw new Error(`unknown project: ${id}`);
+  return p;
+};
+
+async function cmdTask(args) {
+  const [sub, ...rest] = args;
+  const { pos, flags } = parseTaskArgs(rest);
+  if (sub === "add") {
+    const [projectId, ...title] = pos;
+    if (!projectId || !title.length)
+      throw new Error('usage: opc task add <project> "<title>" [--section S] [--priority p0..p3] [--spec <path>] [--prompt <folder>] [--desc <text>]');
+    const out = await taskAdd(projectOf(projectId), {
+      section: flags.section || "Now",
+      title: title.join(" "),
+      priority: flags.priority,
+      spec: flags.spec,
+      prompt: flags.prompt,
+      desc: flags.desc.length ? flags.desc.join("\n") : null,
+    });
+    console.log(`${out.id} added to ${out.section}`);
+    return;
+  }
+  if (sub === "list") {
+    const p = projectOf(pos[0] || "");
+    const items = taskList(p, flags.section);
+    if (flags.json) return console.log(JSON.stringify(items, null, 2));
+    if (!items.length) return console.log("no tasks");
+    for (const t of items) {
+      console.log(`${(t.id || "(no id)").padEnd(9)} ${t.checked ? "[x]" : "[ ]"} ${t.priority ? t.priority + " " : ""}${t.title}  (${t.section})`);
+    }
+    return;
+  }
+  if (sub === "show") {
+    const id = pos[0];
+    const { project, item, source } = taskShow(id);
+    if (flags.json) return console.log(JSON.stringify({ ...item, project: project.id, file: displayFile(source.file) }, null, 2));
+    console.log(`${item.id} · ${item.title}`);
+    console.log(`  ${item.section} · ${item.checked ? "done " + (item.date || "") : "open"}${item.priority ? " · " + item.priority : ""}`);
+    if (item.desc) console.log(`  ${item.desc}`);
+    if (item.spec) console.log(`  spec: ${item.spec}`);
+    if (item.prompt) console.log(`  prompt: ${item.prompt}`);
+    console.log(`  ${displayFile(source.file)} · line ${item.line}`);
+    return;
+  }
+  if (sub === "move") {
+    const [id, to] = pos;
+    if (!id || !to) throw new Error("usage: opc task move <id> <section> [--before <id> | --top | --end]");
+    const p = findProjectById(id);
+    if (!p) throw new Error(`task not found: ${id}`);
+    const before = flags.before !== undefined ? flags.before : flags.end ? null : undefined;
+    const out = await taskMove(p, id, to, before);
+    console.log(out.noop ? `${id} already there` : `${id} → ${to}`);
+    return;
+  }
+  if (sub === "edit") {
+    const id = pos[0];
+    const p = findProjectById(id || "");
+    if (!p) throw new Error(`task not found: ${id || "(missing)"}`);
+    const fields = {};
+    for (const key of ["title", "priority", "spec", "prompt"]) if (flags[key] !== undefined) fields[key] = flags[key];
+    if (flags.desc.length) fields.desc = flags.desc.join("\n");
+    if (!Object.keys(fields).length)
+      throw new Error("usage: opc task edit <id> [--title …] [--priority …] [--spec …] [--prompt …] [--desc …]");
+    await taskEdit(p, id, fields);
+    console.log(`${id} updated`);
+    return;
+  }
+  if (sub === "done") {
+    const id = pos[0];
+    const p = findProjectById(id || "");
+    if (!p) throw new Error(`task not found: ${id || "(missing)"}`);
+    const out = await taskDone(p, id, flags.pr);
+    console.log(out.noop ? `${id} already done` : `${id} → Done`);
+    return;
+  }
+  if (sub === "cancel") {
+    const id = pos[0];
+    const p = findProjectById(id || "");
+    if (!p) throw new Error(`task not found: ${id || "(missing)"}`);
+    await taskCancel(p, id);
+    console.log(`${id} canceled`);
+    return;
+  }
+  if (sub === "migrate") {
+    const out = await taskMigrate(pos[0], flags.key, Boolean(flags["dry-run"]));
+    if (out.dryRun) return console.log(`${out.count} task(s) would become ${out.key}-1..${out.key}-${out.count} → ${out.file}`);
+    console.log(`migrated ${out.project}: ${out.count} task(s) as ${out.key}-1..${out.key}-${out.count} → ${out.file}`);
+    console.log("the repo's docs/backlog.md is now a stale copy — delete it in the next commit");
+    return;
+  }
+  if (sub === "init") {
+    if (!pos[0]) throw new Error("usage: opc task init <project> [--key <KEY>]");
+    const out = await taskInit(projectOf(pos[0]), flags.key);
+    console.log(`initialized ${out.project} · ${out.key} → ${out.file}`);
+    return;
+  }
+  throw new Error("usage: opc task add|list|show|move|edit|done|cancel|migrate|init");
 }
 
 // Insert a block right after the target `## <section>` heading, above any
@@ -1074,7 +1617,7 @@ async function cmdConsole(args) {
       return res.end(lan ? "localhost or your private network only" : "localhost only — run with --lan for your home network");
     }
 
-    // ---- task writes: add a task, move or reposition it, cancel it
+    // ---- task writes: add, move/reposition, cancel (stable IDs, not lines)
     if (req.method === "POST" && (url.pathname === "/task/add" || url.pathname === "/task/move" || url.pathname === "/task/cancel")) {
       const origin = req.headers.origin;
       const originHost = origin && origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -1083,110 +1626,53 @@ async function cmdConsole(args) {
         return sendJson(403, { ok: false, error: "cross-origin write refused" });
       let body = null;
       try { body = JSON.parse(await readBody(req)); } catch { /* answered below */ }
-      const move = url.pathname === "/task/move";
-      const add = url.pathname === "/task/add";
-      const before = move ? body && body.before : undefined;
-      const bad = !body || typeof body.project !== "string" ||
-        (add
-          ? !SECTIONS.includes(body.section) || typeof body.title !== "string" ||
-            (body.priority != null && !/^[pP][0-3]$/.test(body.priority)) ||
-            (body.spec != null && (typeof body.spec !== "string" || /\s/.test(body.spec))) ||
-            (body.prompt != null && (typeof body.prompt !== "string" || /\s/.test(body.prompt))) ||
-            (body.desc != null && typeof body.desc !== "string")
-          : !SECTIONS.includes(body.section) ||
-            !Number.isInteger(body.index) || body.index < 0 ||
-            !Array.isArray(body.block) || !body.block.length ||
-            body.block.some((l) => typeof l !== "string" || l.includes("\n")) ||
-            (move && (!SECTIONS.includes(body.to) ||
-              (before !== undefined && before !== null && (
-                typeof before !== "object" ||
-                !Number.isInteger(before.index) || before.index < 0 ||
-                !Array.isArray(before.block) || !before.block.length ||
-                before.block.some((l) => typeof l !== "string" || l.includes("\n")))))));
-      if (bad) return sendJson(400, { ok: false, error: "bad request shape" });
-      const project = registry.projects.find((p) => p.id === body.project);
-      if (!project) return sendJson(404, { ok: false, error: `unknown project: ${body.project}` });
-      const file = backlogFile(project);
-      if (!fs.existsSync(file)) return sendJson(404, { ok: false, error: `${project.id}: no docs/backlog.md` });
+      const kind = url.pathname.slice("/task/".length);
+      const shapeError = () => sendJson(400, { ok: false, error: "bad request shape" });
 
-      const text = fs.readFileSync(file, "utf8");
-      const endsNL = text.endsWith("\n");
-      const lines = text.split("\n");
-      if (endsNL) lines.pop();
-
-      // Adding: compose the line in the backlog format, resolve `spec:` and
-      // `prompt:` exactly like opc check does, and put the task on top of its
-      // section (drag it anywhere from the board).
-      if (add) {
-        const title = body.title.trim();
-        if (!title || title.includes("\n") || /\s+—\s+(spec|prompt):\s/.test(title))
-          return sendJson(400, { ok: false, error: "title must be a single line without `— spec:` / `— prompt:` markers" });
-        if (body.spec) {
-          const target = body.spec.startsWith("~/") ? expand(body.spec) : path.resolve(expand(project.path), body.spec);
-          if (!fs.existsSync(target)) return sendJson(400, { ok: false, error: `spec does not resolve: ${body.spec}` });
+      if (kind === "add") {
+        if (!body || typeof body.project !== "string" || !SECTIONS.includes(body.section) ||
+            typeof body.title !== "string" ||
+            (body.priority != null && typeof body.priority !== "string") ||
+            (body.spec != null && typeof body.spec !== "string") ||
+            (body.prompt != null && typeof body.prompt !== "string") ||
+            (body.desc != null && typeof body.desc !== "string")) return shapeError();
+        const project = registry.projects.find((p) => p.id === body.project);
+        if (!project) return sendJson(404, { ok: false, error: `unknown project: ${body.project}` });
+        try {
+          const out = await taskAdd(project, {
+            section: body.section,
+            title: body.title,
+            priority: body.priority || null,
+            spec: body.spec || null,
+            prompt: body.prompt || null,
+            desc: body.desc || null,
+          });
+          return sendJson(200, { ok: true, id: out.id, at: { section: out.section, index: out.index }, data: await freshScan() });
+        } catch (err) {
+          const status = /duplicate:|not migrated|no task store/.test(err.message) ? 409 : 400;
+          return sendJson(status, { ok: false, error: err.message });
         }
-        if (body.prompt && !resolvePrompt(project.id, body.prompt))
-          return sendJson(400, { ok: false, error: `prompt does not resolve: ${body.prompt}` });
-        let line = `- [ ] ${title}`;
-        if (body.spec) line += ` — spec: ${body.spec}`;
-        if (body.prompt) line += ` — prompt: ${body.prompt}`;
-        if (body.priority) line += ` — ${body.priority.toLowerCase()}`;
-        if (body.section === "Done") line = toDone(line);
-        const block = [line, ...String(body.desc || "").split("\n")
-          .map((d) => d.trim().replace(/^(?:d|desc):\s*/i, "")).filter(Boolean)
-          .map((d) => `  D: ${d}`)];
-        const inserted = insertItem(lines, body.section, 0, block);
-        if (inserted === false) return sendJson(409, { ok: false, error: `backlog has no "## ${body.section}" section` });
-        fs.writeFileSync(file, lines.join("\n") + (endsNL ? "\n" : ""));
-        return sendJson(200, { ok: true, at: { section: body.section, index: inserted }, data: await freshScan() });
       }
 
-      const found = locateTask(lines, body.section, body.index);
-      const same = found && found.end - found.start + 1 === body.block.length &&
-        body.block.every((l, i) => l === lines[found.start + i]);
-      if (!same) return sendJson(409, { ok: false, error: "backlog changed" });
-
-      // Position: `before` names the item the block lands above (same project,
-      // same section), null appends to the section, omitted keeps the original
-      // top insertion. The anchor is verified like the moved block itself.
-      let anchor = null;
-      if (move) {
-        if (before !== undefined && before !== null) {
-          const foundA = locateTask(lines, body.to, before.index);
-          const sameA = foundA && foundA.end - foundA.start + 1 === before.block.length &&
-            before.block.every((l, i) => l === lines[foundA.start + i]);
-          if (!sameA) return sendJson(409, { ok: false, error: "backlog changed" });
-          anchor = before.index;
+      if (!body || typeof body.id !== "string") return shapeError();
+      const id = body.id;
+      const project = findProjectById(id);
+      if (!project) return sendJson(404, { ok: false, error: `task not found: ${id}` });
+      try {
+        if (kind === "move") {
+          if (!SECTIONS.includes(body.to) ||
+              !(body.before === undefined || body.before === null || typeof body.before === "string"))
+            return shapeError();
+          const out = await taskMove(project, id, body.to, body.before);
+          if (out.noop) return sendJson(200, { ok: true, noop: true });
+          return sendJson(200, { ok: true, at: { section: out.section, index: out.index }, data: await freshScan() });
         }
-        // dropping the item back into its own slot is a no-op
-        if (body.to === body.section && (anchor === body.index || anchor === body.index + 1))
-          return sendJson(200, { ok: true, noop: true });
+        await taskCancel(project, id);
+        return sendJson(200, { ok: true, data: await freshScan() });
+      } catch (err) {
+        const status = /not found|is not in/.test(err.message) ? 404 : /not migrated|no task store/.test(err.message) ? 409 : 400;
+        return sendJson(status, { ok: false, error: err.message });
       }
-
-      const block = body.block.slice();
-      if (move) {
-        if (body.to === "Done") block[0] = toDone(block[0]);
-        else if (body.section === "Done") block[0] = fromDone(block[0]);
-      }
-      lines.splice(found.start, found.end - found.start + 1);
-      // a block that was the only item leaves a doubled blank around the
-      // removed spot — collapse one so empty sections keep the file's style
-      if (lines[found.start - 1] !== undefined && lines[found.start - 1].trim() === "" &&
-          lines[found.start] !== undefined && lines[found.start].trim() === "")
-        lines.splice(found.start, 1);
-
-      let at = null;
-      if (move) {
-        let k = 0; // stale client without `before`: the original top insertion
-        if (before === null) k = Number.MAX_SAFE_INTEGER; // append after the last item
-        else if (before !== undefined) k = body.to === body.section && anchor > body.index ? anchor - 1 : anchor;
-        const inserted = insertItem(lines, body.to, k, block);
-        if (inserted === false)
-          return sendJson(409, { ok: false, error: `backlog has no "## ${body.to}" section` });
-        at = { section: body.to, index: inserted };
-      }
-      fs.writeFileSync(file, lines.join("\n") + (endsNL ? "\n" : ""));
-      return sendJson(200, { ok: true, at, data: await freshScan() });
     }
     if (req.method !== "GET") { res.writeHead(405); return res.end("method not allowed"); }
 
@@ -1271,7 +1757,10 @@ async function main() {
   if (cmd === "check") return cmdCheck(args);
   if (cmd === "scan") return cmdScan(args);
   if (cmd === "console") return cmdConsole(args);
-  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  sync/check follow the checkout you run them from; --dir overrides");
+  if (cmd === "task") {
+    try { return await cmdTask(args); } catch (err) { console.error(err.message); process.exit(1); }
+  }
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  opc task add|list|show|move|edit|done|cancel|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 
