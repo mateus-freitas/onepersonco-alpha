@@ -39,12 +39,13 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 - One objective per branch and PR; start from refreshed `origin/main`. Continue
   the existing branch when updating its PR.
-- Branch names carry intent first: `<type>/<slug>` with the conventional types
-  (`feat/`, `fix/`, `docs/`, `chore/`, `refactor/`, `test/`, `perf/`), e.g.
-  `feat/rest-timer`, `chore/opc-retrofit`. When several agents run concurrently
-  and authorship adds signal, prefix the agent that actually authored the
-  branch — `claude/…`, `opencode/…`, `codex/…`, `deepseek/…`, e.g.
-  `opencode/feat/gymbloc-retrofit`. The prefix is optional and must be truthful;
+- Branch names carry intent first: `<type>/<slug>`, the slug starting with the
+  task ID when there is one — `feat/GYM-142-rest-timer`, `chore/opc-retrofit` —
+  with the conventional types (`feat/`, `fix/`, `docs/`, `chore/`, `refactor/`,
+  `test/`, `perf/`). When several agents run concurrently and authorship adds
+  signal, prefix the agent that actually authored the branch — `claude/…`,
+  `opencode/…`, `codex/…`, `deepseek/…`, e.g.
+  `opencode/feat/GYM-142-retrofit`. The prefix is optional and must be truthful;
   the old default of every branch carrying `codex/` regardless of the author is
   retired. Workspace tools that auto-name branches (e.g. `t3/…`) are fine while
   a run is exploratory; rename to the convention once it becomes a real
@@ -53,7 +54,7 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 - Preserve unrelated changes in a dirty worktree; stage explicit paths or hunks
   and check the staged diff before committing.
 - If work depends on an unmerged PR, use an explicitly documented stacked PR with
-  the correct base — never silently bundle the backlog.
+  the correct base — never silently bundle a second task.
 
 ### Commits
 
@@ -77,14 +78,15 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 - One request is one PR; split only when the objective genuinely spans unrelated
   behavior or the owner asks.
 - Body: the problem in a sentence or two, then how it was fixed; relevant
-  evidence; remaining limits. End with the model and harness that did the work.
+  evidence; remaining limits. Cite the task on its own line (`Task: GYM-142`);
+  end with the model and harness that did the work.
 - UI changes: before/after images (motion or timing: a short video). Upload media
   to GitHub — never commit PR-only assets to the repo.
 - Open draft first when the flow requires independent reviews; mark ready only
   with evidence on the final head. If the project's local block defines an
   external review trigger, apply it before the PR leaves draft; some triggers
   do not fire on PRs that are already ready.
-- A merged PR is the implementation record; update the tracking item when it lands.
+- A merged PR is the implementation record.
 
 ### Babysitting
 
@@ -147,28 +149,39 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 ## Backlog
 
-- One file per project: `docs/backlog.md`. One line per task; sections
-  `## Now`, `## Next`, `## Later`, `## Done (recent)`.
-- Format: `- [ ] Title — spec: <path> — prompt: <prompts folder> — p0..p3`.
-  The title is the slug and stays stable once a commit or PR cites it; `spec:`,
-  `prompt:` and priority are optional. An indented `D: <text>` line directly
-  under a task is its description — the console shows it on the task's card
-  and detail view.
-- The backlog lives in `main` and is the single source of truth. A branch may
-  carry `docs/backlog.md` edits for its objective — tick its line, add
-  follow-ups it discovered — and those edits become real when the PR merges.
-  Worktrees never keep a separate task list.
-- Prompts are sessions, not tasks: one scratch folder per unit of work
-  (`prompts/<date>-<slug>/`), linked from the task line with `prompt:` so the
-  tooling can find its brief and worktree. When a task finishes, check its line
-  and archive the folder; leftover work becomes new lines.
-- New follow-ups discovered during work go here as lines — not into scratch
-  files, review narratives, or chat-only notes.
-- Closing is validated, not assumed: a single agent ticks its own line in its
-  branch; an orchestrator validates the full backlog for the run at the end
-  (every line ticked, discoveries captured) and lands any missing bookkeeping
-  as a small separate `docs(backlog): …` commit or PR.
-- The backlog sequences work; it never invents rules or scope.
+Task state is control-plane data: `~/.onepersonco/<project>/backlog.md`, owned by
+`opc task`. It never lives in a project repo, branch, worktree, or PR diff, and
+agents never edit it: read with `opc task list|show`, write with
+`opc task add|edit|move|done|cancel` (the console uses the same writer). Sections:
+`## Now`, `## Next`, `## Later`, `## Done (recent)`.
+
+Format, produced by the CLI and never hand-written:
+
+```
+- [ ] OPC-12 · Title — spec: docs/x.md — prompt: prompts/<folder> — p1
+- [x] OPC-3 · Done thing — 2026-10-19
+  D: optional description line
+```
+
+`OPC-12` is the task ID: assigned by `opc task add` (there is no `--id`), stable,
+never reused. `spec:`, `prompt:` and priority are optional; cite the ID, not the
+title.
+
+Done at merge: after the PR merges, the orchestrator runs `opc task done <id>
+[--pr <url>]`. Branches and PR bodies carry the ID — branch
+`feat/GYM-142-rest-timer`, PR body `Task: GYM-142`. The merged PR stays the code
+record; the store holds the plan and state.
+
+Un-migrated projects read their repo `docs/backlog.md` read-only and show a
+migration hint (`opc task migrate <project> --key <KEY>`); never edit it. A
+project with no backlog yet starts with `opc task init <project> --key <KEY>`.
+
+Prompts are sessions, not tasks: one scratch folder per unit of work
+(`prompts/<date>-<slug>/`), attached with `--prompt` at creation or later via
+`opc task edit`. When a task closes, archive its folder; leftover work becomes a
+new task — never a scratch note or a chat-only remark.
+
+The backlog sequences work; it never invents rules or scope.
 <!-- opc:end backlog -->
 
 <!-- opc:begin review-gates -->
@@ -209,10 +222,11 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   verifies every diff itself and owns every commit; delegation never replaces
   the project's review gates; explicit user instructions always win.
 - Model and effort selection follows `agent-model-selection`.
-- Closing duty: validate the backlog for the whole run — every objective line
-  ticked, discoveries became lines. Workers may edit the backlog on their
-  branches; validate their edits instead of blocking them. Bookkeeping missing
-  from the work's PRs lands as a small separate `docs(backlog): …` commit/PR.
+- Closing duty: validate the run against the task store — `opc task list
+  <project> --json` before reporting finished. Workers never write the store,
+  and branches or PRs never carry task edits; the orchestrator runs
+  `opc task add` for discoveries and `opc task done <id> --pr <url>` once each
+  PR merges. Missing bookkeeping is a CLI call, not a commit.
 - Isolated worktrees live under the worktrees root in `projects.json`
   (`~/dev/.onepersonco/worktrees/<project>/<slug>/`); app-managed checkouts
   (T3's `~/.t3/worktrees/`) are acceptable; legacy paths are grandfathered.
@@ -230,5 +244,5 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   `opc check`. Drift is a bug, not a style choice.
 - Skills: after editing `skills/`, run `npx skills update` so every harness
   picks the change up.
-- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc console [--lan]` (rescans on every open; `--lan` also serves the home wifi for phones). `opc new` arrives with the skeleton.
+- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc console [--lan]` (rescans on every open; `--lan` also serves the home wifi for phones) · `opc task …` (the task store; IDs are assigned by `add`). `opc new` arrives with the skeleton.
 - The hub itself is registered in `projects.json`, so the console covers it.
