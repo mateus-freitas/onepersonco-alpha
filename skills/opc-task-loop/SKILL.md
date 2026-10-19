@@ -1,19 +1,19 @@
 ---
 name: opc-task-loop
-description: "Use when finishing work in an OPC (One Person Company) project. Covers closing backlog lines, filing leftovers, deciding where documents go, and graduating durable knowledge. Triggers include task done, wrap up, write it up, where should this doc go, close the task."
+description: "Use when finishing work in an OPC (One Person Company) project. Covers closing a task, filing leftovers, deciding where documents go, and graduating durable knowledge. Triggers include task done, wrap up, write it up, where should this doc go, close the task."
 ---
 
 # Closing out a task in OPC projects
 
 Work is not done until the bookkeeping is. The whole loop takes a minute.
 
-1. **Tick the backlog line.** In `docs/backlog.md`, mark `[x]` and append
-   `— YYYY-MM-DD`. Keep the line's `prompt:` link current — the backlog block
-   of `AGENTS.md` owns the format. Leftover work becomes *new* lines under
-   Now/Next/Later — never a scratch file, a review comment, or chat-only
-   notes. Solo agent: these edits ride your branch and become real when the PR
-   merges. Under an orchestrator: it validates all lines at the end and lands
-   anything missing separately.
+1. **Close the task.** `opc task done <id> [--pr <url>]` — marks it done with
+   today's date; running it twice is a no-op. After a merge the orchestrator runs
+   it.
+   Leftover work becomes a new task: `opc task add <project> "<title>"` with
+   `--spec`, `--prompt`, `--desc` as needed, then `opc task move <id> <section>`.
+   Never edit the store file, and never put task edits on a branch — the store
+   is control-plane data.
 2. **Where does new content go?** (the placement decision)
    - A rule that must never silently be violated → propose a change to the
      matching fragment in the hub (`standards/`), never a repo-local rule.
@@ -32,12 +32,12 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
    and follow them at open time: open as draft when the flow requires it,
    apply trigger labels while still draft, then mark ready. Record
    selected/skipped in the PR body.
-5. **Record.** The merged PR is the implementation record; update the tracking
-   item. An evidence folder only when the project tracks one.
+5. **Record.** The merged PR is the implementation record; the task's state is
+   already in the store. An evidence folder only when the project tracks one.
 6. **Archive the session.** Move the task's scratch folder
    (`prompts/<date>-<slug>/`) to `prompts/archive/` once its outcome is
-   captured — the task line's `prompt:` link still resolves there; anything
-   still open is a backlog line, not a note.
+   captured — the task's `prompt:` link still resolves there; anything still
+   open is a task, not a note.
 7. **Verify before claiming done.** `opc check` for structure and drift, plus
    the project's own gates for code. Never claim green from memory.
 

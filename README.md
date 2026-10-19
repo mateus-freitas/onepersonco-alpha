@@ -11,16 +11,18 @@ version gets the `onepersonco` name — this checkout keeps `-alpha`.
 
 | path | what |
 | --- | --- |
-| `standards/` | the rule fragments synced into each repo's `AGENTS.md` (git/PR etiquette, docs discipline, backlog format, orchestration, agent-model selection, platform overlays) |
+| `standards/` | the rule fragments synced into each repo's `AGENTS.md` (git/PR etiquette, docs discipline, task rules, orchestration, agent-model selection, platform overlays) |
 | `projects.json` | the project registry — adding a project here is all it takes for the console (and `opc sync`) to see it |
 | `skills/` | cross-harness agent skills (`opc-delegate`, `opc-task-loop`), installed machine-wide via the skills CLI |
 | `console/` | the local visual console: scan → index → localhost UI |
-| `scripts/` | the `opc` CLI: `sync` · `check` · `scan` · `console` (`new` comes with the skeleton) |
+| `scripts/` | the `opc` CLI: `sync` · `check` · `scan` · `console` · `task` (`new` comes with the skeleton) |
 | `skeleton/` | template for new projects, extracted from blocos + gymbloc (pending) |
 
-Machine-local working data — scratch, worktrees, trash — lives *outside* every
-repo in the hidden sibling `~/dev/.onepersonco/` (see its README). Nothing
-there is committed; scratch is safe to delete, worktrees are live checkouts.
+Machine-local working data — scratch, worktrees, trash, and each project's task
+store (`backlog.md` + `backlog.meta.json`) — lives *outside* every repo in the
+hidden sibling `~/dev/.onepersonco/` (see its README). Nothing there is
+committed; scratch is safe to delete, worktrees are live checkouts, and the task
+store is written only by `opc task`.
 
 ## Getting started
 
@@ -101,12 +103,13 @@ After editing a skill in this repo: `npx skills update`.
 Standardized projects carry managed blocks in `AGENTS.md` (plus a one-line
 `CLAUDE.md` pointer) that `opc sync` writes; never edit them by hand. A project
 that has not adopted the standards yet shows as "pending retrofit" in
-`opc check` and in the console — the retrofit is a guided task (see
-`docs/backlog.md`).
+`opc check` and in the console — the retrofit is a task in the hub's store (see
+`docs/guides/tasks.md`).
 
 ## Daily use
 
-- `opc check [--dir <checkout>]` — deterministic health: drift, markers, backlog lines, links; audits the checkout you run it from (worktree included); the hub's main checkout still audits every project; `--dir` overrides
+- `opc check [--dir <checkout>]` — deterministic health: drift, markers, tasks, links; audits the checkout you run it from (worktree included); the hub's main checkout still audits every project; `--dir` overrides
+- `opc task …` — the backlog: `add` · `edit` · `list` · `show` · `move` · `done` · `cancel` · `migrate` · `init`; the store lives at `~/.onepersonco/<project>/backlog.md` and is never committed (see `docs/guides/tasks.md`)
 - `opc console [--lan]` — the console; rescans on every load (board · worktrees · RFCs · docs · prompts · health); `--lan` also answers your home wifi so a phone can read and edit (same network only; opening paths stays Mac-only)
 - `opc sync [project…] [--dir <checkout>]` — push standards changes into standardized projects; targets the checkout you run it from (worktree included); the hub's main checkout still syncs all standardized projects; `--dir` overrides
 - `opc scan --snapshot` — refresh the self-contained `console/snapshot.html`
@@ -122,9 +125,9 @@ that has not adopted the standards yet shows as "pending retrofit" in
   Worktrees tab lists every project's linked checkouts (branch, dirty, ahead/behind
   vs local `main`, last commit, PR state via `gh`, clickable paths); without an
   authenticated `gh` the PR states are hidden and the scan still works. Board
-  cards carry the task's `D:` description and `prompt`/`worktree` state, and open
-  a detail drawer: the prompt folder, its rendered `TASK.md`/`NOTES.md`, the
-  matched worktrees, and the backlog line itself.
+  cards carry the task ID and its `D:` description, plus `prompt`/`worktree`
+  state, and open a detail drawer: the prompt folder, its rendered
+  `TASK.md`/`NOTES.md`, the matched worktrees, and the store file with its line.
 - **The CLI** is `scripts/opc.mjs` — plain Node, stdlib only. Keep it
   dependency-free; `node --check` + `opc check` before committing.
 - **Skills** live in `skills/<name>/SKILL.md`. Quote frontmatter descriptions

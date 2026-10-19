@@ -14,10 +14,15 @@ this is not a feature index.
 - **Scratch** — `~/dev/.onepersonco/`; per-project working memory (prompts,
   active plans, research notes, artifacts, trash). Never committed, safe to
   delete, not a source of truth. Durable knowledge graduates into a repo.
-- **Backlog line** — one line in a project's `docs/backlog.md`; the only task
-  format agents write.
+- **Task** — one line in the store: title, optional `spec:`/`prompt:`/priority,
+  a `D:` description, and a section (`Now` · `Next` · `Later` · `Done`).
+- **Task ID** — `KEY-N` (`GYM-142`), assigned by `opc task add`, stable and never
+  reused; branches and PR bodies cite it.
+- **Task store** — `~/.onepersonco/<project>/backlog.md` plus
+  `backlog.meta.json`; control-plane data outside every repo, written only by
+  `opc task` and the console, never committed.
 - **Console** — the local web app (`opc console`) that scans projects + scratch
   and renders the kanban board, worktrees, RFCs, prompts and evidence views.
 - **Board** — the kanban view (tab) inside the console.
-- **opc** — the CLI in `scripts/` (sync · check · scan · console; `new` comes
-  with the skeleton).
+- **opc** — the CLI in `scripts/` (sync · check · scan · console · task; `new`
+  comes with the skeleton).

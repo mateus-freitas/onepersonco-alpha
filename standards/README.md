@@ -19,7 +19,7 @@ Marker convention (first line of every fragment):
 | --- | --- | --- |
 | `core/git-pr.md` | block `git-pr` | branches, commits, PR etiquette, per-project PR policy, babysitting |
 | `core/docs.md` | block `docs` | audience split, discipline, scratch rules, doc headers |
-| `core/backlog.md` | block `backlog` | the one-line task format, sections, source-of-truth and closing rules |
+| `core/backlog.md` | block `backlog` | task store location, line format and IDs, CLI-only writes, done-at-merge |
 | `core/review-gates.md` | block `review-gates` | when the independent review is required; the shared contract |
 | `core/agent-selection.md` | file `docs/development/agent-model-selection.md` | model/effort selection (replaces the two diverged copies) |
 | `core/orchestration.md` | block `orchestration` | pointer + non-negotiables; the full procedure lives in `skills/opc-delegate` |
@@ -36,5 +36,6 @@ Marker convention (first line of every fragment):
 | --- | --- |
 | `platforms/flutter.md` · `platforms/ts-firebase.md` | the blocos retrofit |
 
-`templates/` holds the small stubs agents copy: `backlog.md`, `doc-header.md`,
-`prompt-folder.md`.
+`templates/` holds the small stubs agents copy: `doc-header.md`,
+`prompt-folder.md`. `templates/backlog.md` is a format reference for the task
+store only — it is not copied into project repos.

@@ -19,12 +19,13 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 - One objective per branch and PR; start from refreshed `origin/main`. Continue
   the existing branch when updating its PR.
-- Branch names carry intent first: `<type>/<slug>` with the conventional types
-  (`feat/`, `fix/`, `docs/`, `chore/`, `refactor/`, `test/`, `perf/`), e.g.
-  `feat/rest-timer`, `chore/opc-retrofit`. When several agents run concurrently
-  and authorship adds signal, prefix the agent that actually authored the
-  branch — `claude/…`, `opencode/…`, `codex/…`, `deepseek/…`, e.g.
-  `opencode/feat/gymbloc-retrofit`. The prefix is optional and must be truthful;
+- Branch names carry intent first: `<type>/<slug>`, the slug starting with the
+  task ID when there is one — `feat/GYM-142-rest-timer`, `chore/opc-retrofit` —
+  with the conventional types (`feat/`, `fix/`, `docs/`, `chore/`, `refactor/`,
+  `test/`, `perf/`). When several agents run concurrently and authorship adds
+  signal, prefix the agent that actually authored the branch — `claude/…`,
+  `opencode/…`, `codex/…`, `deepseek/…`, e.g.
+  `opencode/feat/GYM-142-retrofit`. The prefix is optional and must be truthful;
   the old default of every branch carrying `codex/` regardless of the author is
   retired. Workspace tools that auto-name branches (e.g. `t3/…`) are fine while
   a run is exploratory; rename to the convention once it becomes a real
@@ -33,7 +34,7 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 - Preserve unrelated changes in a dirty worktree; stage explicit paths or hunks
   and check the staged diff before committing.
 - If work depends on an unmerged PR, use an explicitly documented stacked PR with
-  the correct base — never silently bundle the backlog.
+  the correct base — never silently bundle a second task.
 
 ### Commits
 
@@ -57,14 +58,15 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 - One request is one PR; split only when the objective genuinely spans unrelated
   behavior or the owner asks.
 - Body: the problem in a sentence or two, then how it was fixed; relevant
-  evidence; remaining limits. End with the model and harness that did the work.
+  evidence; remaining limits. Cite the task on its own line (`Task: GYM-142`);
+  end with the model and harness that did the work.
 - UI changes: before/after images (motion or timing: a short video). Upload media
   to GitHub — never commit PR-only assets to the repo.
 - Open draft first when the flow requires independent reviews; mark ready only
   with evidence on the final head. If the project's local block defines an
   external review trigger, apply it before the PR leaves draft; some triggers
   do not fire on PRs that are already ready.
-- A merged PR is the implementation record; update the tracking item when it lands.
+- A merged PR is the implementation record.
 
 ### Babysitting
 

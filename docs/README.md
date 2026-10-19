@@ -3,10 +3,14 @@
 | path | audience | what |
 | --- | --- | --- |
 | `../standards/` | agents + you | the shared rules — source of truth, synced into projects |
-| `backlog.md` | you | the hub's work queue, one line per task |
-| `internals/` | agents + you | how sync, scan and the console work; traps; how-tos |
+| `internals/` | agents + you | how sync, scan, the console and the task store work; decisions and traps |
+| `guides/` | you | step-by-step procedures — `tasks.md`: add, move and close a task |
 | `glossary.md` | both | shared vocabulary |
 | `evidence/` | both | proof and outcomes for finished hub tasks |
 
-Authority: `AGENTS.md` (always read) → `standards/` → `internals/`. The backlog
-sequences work; it never invents rules.
+The work queue is not a repo file: it is the hub's task store at
+`~/.onepersonco/onepersonco-alpha/backlog.md`, written only by `opc task` and the
+console.
+
+Authority: `AGENTS.md` (always read) → `standards/` → `internals/`. The task
+store sequences work; it never invents rules.

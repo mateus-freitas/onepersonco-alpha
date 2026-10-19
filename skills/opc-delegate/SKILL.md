@@ -18,12 +18,13 @@ You are the orchestrator. You own architecture, interfaces, integration, and
    attempts, genuine complexity). Record model and effort in the task record.
 3. **Write a complete brief** as `TASK.md` in the task's scratch folder
    (`~/dev/.onepersonco/<project>/prompts/<YYYY-MM-DD>-<slug>/`; template:
-   the hub's `standards/templates/prompt-folder.md`). A brief carries: workdir
-   and owned files, the exact deliverable, how to verify, the forbidden
-   actions ("do not commit, push, or merge — leave the tree dirty"), and where
-   to write `NOTES.md`. Record the folder on the task's backlog line
-   (`— prompt: prompts/<folder>`) so the console links brief and worktree. An
-   incomplete brief is not a delegation — it is a gamble.
+   the hub's `standards/templates/prompt-folder.md`). A brief carries: the task
+   ID (`Task: GYM-142`), workdir and owned files, the exact deliverable, how to
+   verify, the forbidden actions ("do not commit, push, or merge — leave the
+   tree dirty"), and where to write `NOTES.md`. Attach the folder at creation
+   (`opc task add … --prompt prompts/<folder>`) or once work starts
+   (`opc task edit <id> --prompt prompts/<folder>`) so the console links brief
+   and worktree. An incomplete brief is not a delegation — it is a gamble.
 4. **Launch.** T3 Code: `delegate_task` (one task per brief, async, stable
    `clientRequestId`, model in `target`); Claude: the subagent tool; Codex:
    `codex exec -C <worktree> -m <model> …`. Parallel workers get their own
@@ -39,12 +40,11 @@ You are the orchestrator. You own architecture, interfaces, integration, and
    and follow them at open time: open as draft when the flow requires it,
    apply trigger labels while still draft, then mark ready. Record
    selected/skipped in the PR body.
-8. **Close the backlog.** At the end of the run, validate `docs/backlog.md`:
-   every objective line ticked, every discovery captured as a line, nothing
-   half-worded. Workers are allowed to edit the backlog on their branches —
-   validate their edits rather than blocking them (a solo agent relies on
-   that). Whatever is missing lands as a small separate `docs(backlog): …`
-   commit or PR — never reopen a finished PR for bookkeeping.
+8. **Close the run.** `opc task list <project> --json` at the end: every
+   objective done — `opc task done <id> --pr <url>` once its PR merges — every
+   discovery filed as its own task (`opc task add`), nothing half-worded.
+   Workers never touch the store, so there is no backlog diff to review and no
+   bookkeeping commit to land.
 9. **Report honestly:** verified state, what was skipped, open questions, what
    the owner must decide.
 

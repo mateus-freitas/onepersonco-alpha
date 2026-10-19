@@ -2,25 +2,36 @@
 
 ## Backlog
 
-- One file per project: `docs/backlog.md`. One line per task; sections
-  `## Now`, `## Next`, `## Later`, `## Done (recent)`.
-- Format: `- [ ] Title — spec: <path> — prompt: <prompts folder> — p0..p3`.
-  The title is the slug and stays stable once a commit or PR cites it; `spec:`,
-  `prompt:` and priority are optional. An indented `D: <text>` line directly
-  under a task is its description — the console shows it on the task's card
-  and detail view.
-- The backlog lives in `main` and is the single source of truth. A branch may
-  carry `docs/backlog.md` edits for its objective — tick its line, add
-  follow-ups it discovered — and those edits become real when the PR merges.
-  Worktrees never keep a separate task list.
-- Prompts are sessions, not tasks: one scratch folder per unit of work
-  (`prompts/<date>-<slug>/`), linked from the task line with `prompt:` so the
-  tooling can find its brief and worktree. When a task finishes, check its line
-  and archive the folder; leftover work becomes new lines.
-- New follow-ups discovered during work go here as lines — not into scratch
-  files, review narratives, or chat-only notes.
-- Closing is validated, not assumed: a single agent ticks its own line in its
-  branch; an orchestrator validates the full backlog for the run at the end
-  (every line ticked, discoveries captured) and lands any missing bookkeeping
-  as a small separate `docs(backlog): …` commit or PR.
-- The backlog sequences work; it never invents rules or scope.
+Task state is control-plane data: `~/.onepersonco/<project>/backlog.md`, owned by
+`opc task`. It never lives in a project repo, branch, worktree, or PR diff, and
+agents never edit it: read with `opc task list|show`, write with
+`opc task add|edit|move|done|cancel` (the console uses the same writer). Sections:
+`## Now`, `## Next`, `## Later`, `## Done (recent)`.
+
+Format, produced by the CLI and never hand-written:
+
+```
+- [ ] OPC-12 · Title — spec: docs/x.md — prompt: prompts/<folder> — p1
+- [x] OPC-3 · Done thing — 2026-10-19
+  D: optional description line
+```
+
+`OPC-12` is the task ID: assigned by `opc task add` (there is no `--id`), stable,
+never reused. `spec:`, `prompt:` and priority are optional; cite the ID, not the
+title.
+
+Done at merge: after the PR merges, the orchestrator runs `opc task done <id>
+[--pr <url>]`. Branches and PR bodies carry the ID — branch
+`feat/GYM-142-rest-timer`, PR body `Task: GYM-142`. The merged PR stays the code
+record; the store holds the plan and state.
+
+Un-migrated projects read their repo `docs/backlog.md` read-only and show a
+migration hint (`opc task migrate <project> --key <KEY>`); never edit it. A
+project with no backlog yet starts with `opc task init <project> --key <KEY>`.
+
+Prompts are sessions, not tasks: one scratch folder per unit of work
+(`prompts/<date>-<slug>/`), attached with `--prompt` at creation or later via
+`opc task edit`. When a task closes, archive its folder; leftover work becomes a
+new task — never a scratch note or a chat-only remark.
+
+The backlog sequences work; it never invents rules or scope.
