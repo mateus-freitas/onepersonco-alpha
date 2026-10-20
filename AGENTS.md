@@ -128,7 +128,7 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 ### Scratch and evidence
 
 - Prompts, active plans, research notes, and artifacts live in the scratch root
-  registered in `projects.json` (`~/dev/.onepersonco/<project>/`) — never
+  registered in `projects.json` (`~/.onepersonco/<project>/`) — never
   committed. Durable knowledge graduates into the repo or it does not count.
 - No new `plans/` (or research) folders in repos. Existing committed plan and
   research documents are grandfathered and may stay, but new working plans live
@@ -178,10 +178,6 @@ Done at merge: after the PR merges, the orchestrator runs `opc task done <id>
 [--pr <url>]`. Branches and PR bodies carry the ID — branch
 `feat/GYM-142-rest-timer`, PR body `Task: GYM-142`. The merged PR stays the code
 record; the store holds the plan and state.
-
-Un-migrated projects read their repo `docs/backlog.md` read-only and show a
-migration hint (`opc task migrate <project> --key <KEY>`); never edit it. A
-project with no backlog yet starts with `opc task init <project> --key <KEY>`.
 
 Prompts are sessions, not tasks: one scratch folder per unit of work
 (`prompts/<date>-<slug>/`), attached with `--prompt` at creation or later via
@@ -235,7 +231,7 @@ The backlog sequences work; it never invents rules or scope.
   `opc task add` for discoveries and `opc task done <id> --pr <url>` once each
   PR merges. Missing bookkeeping is a CLI call, not a commit.
 - Isolated worktrees live under the worktrees root in `projects.json`
-  (`~/dev/.onepersonco/worktrees/<project>/<slug>/`); app-managed checkouts
+  (`~/.onepersonco/worktrees/<project>/<slug>/`); app-managed checkouts
   (T3's `~/.t3/worktrees/`) are acceptable; legacy paths are grandfathered.
 - `opc sync`/`opc check` are checkout-aware: run them from inside the worktree
   you are changing and they target that checkout, so drift and "sync is a
