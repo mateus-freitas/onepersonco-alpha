@@ -151,9 +151,9 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 Task state is control-plane data: `~/.onepersonco/<project>/backlog.md`, owned by
 `opc task`. It never lives in a project repo, branch, worktree, or PR diff, and
-agents never edit it: read with `opc task list|show`, write with
-`opc task add|edit|move|done|cancel` (the console uses the same writer). Sections:
-`## Now`, `## Next`, `## Later`, `## Done (recent)`.
+agents never edit it: read with `opc task list|show|search`, write with
+`opc task add|edit|move|done|cancel|restore` (the console uses the same writer).
+Sections: `## Now`, `## Next`, `## Later`, `## Done (recent)`.
 
 Format, produced by the CLI and never hand-written:
 
@@ -164,8 +164,15 @@ Format, produced by the CLI and never hand-written:
 ```
 
 `OPC-12` is the task ID: assigned by `opc task add` (there is no `--id`), stable,
-never reused. `spec:`, `prompt:` and priority are optional; cite the ID, not the
-title.
+never reused — archived IDs count too. `spec:`, `prompt:` and priority are
+optional; cite the ID, not the title.
+
+Done keeps the 25 most recent completions. Older ones spill automatically to
+`backlog.archive.jsonl` on the next write; `cancel` moves a task there instead of
+deleting it. The archive is machine-facing JSONL, one task per line: never read
+it into context — use `opc task show <id>` or `opc task search <project>
+"<text>"`. `opc task restore <id> [--section Now|Next|Later]` reopens a task with
+the same ID; `opc task list --all` includes history. Never hand-edit either file.
 
 Done at merge: after the PR merges, the orchestrator runs `opc task done <id>
 [--pr <url>]`. Branches and PR bodies carry the ID — branch
