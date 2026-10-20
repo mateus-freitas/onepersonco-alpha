@@ -16,7 +16,7 @@ first consumer of everything `standards/` prescribes.
 - `console/` — the local console (scan → index → localhost UI)
 - `scripts/` — the `opc` CLI
 - `docs/` — backlog, internals, glossary, evidence (see `docs/README.md`)
-- Scratch: `~/dev/.onepersonco/onepersonco-alpha/` — never commit scratch
+- Scratch: `~/.onepersonco/onepersonco-alpha/` — never commit scratch
 
 <!-- opc:begin git-pr -->
 

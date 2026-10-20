@@ -1,7 +1,7 @@
 # prompts/<YYYY-MM-DD>-<slug>/
 
 The scratch folder for one unit of work. Lives under
-`~/dev/.onepersonco/<project>/prompts/`, one folder per task so parallel agents
+`~/.onepersonco/<project>/prompts/`, one folder per task so parallel agents
 never collide.
 
 - `TASK.md` — the brief handed to the agent, copy-paste ready

@@ -20,7 +20,7 @@ version gets the `onepersonco` name — this checkout keeps `-alpha`.
 
 Machine-local working data — scratch, worktrees, trash, and each project's task
 store (`backlog.md` + `backlog.meta.json` + `backlog.archive.jsonl`) — lives
-*outside* every repo in the hidden sibling `~/dev/.onepersonco/` (see its
+*outside* every repo in the hidden `~/.onepersonco/` (see its
 README). Nothing there is committed; scratch is safe to delete, worktrees are
 live checkouts, and the task store is written only by `opc task`.
 
@@ -58,9 +58,9 @@ missing after switching versions, `nvm use` and `npm link` again.
 ### 4 · Create the machine-local working data
 
 ```sh
-mkdir -p ~/dev/.onepersonco/{shared,trash,worktrees}
+mkdir -p ~/.onepersonco/{shared,trash,worktrees}
 for p in blocos gymbloc onepersonco-alpha; do
-  mkdir -p ~/dev/.onepersonco/$p/{prompts,plans,research,artifacts,archive}
+  mkdir -p ~/.onepersonco/$p/{prompts,plans,research,artifacts,archive}
 done
 ```
 

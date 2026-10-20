@@ -32,10 +32,6 @@ Done at merge: after the PR merges, the orchestrator runs `opc task done <id>
 `feat/GYM-142-rest-timer`, PR body `Task: GYM-142`. The merged PR stays the code
 record; the store holds the plan and state.
 
-Un-migrated projects read their repo `docs/backlog.md` read-only and show a
-migration hint (`opc task migrate <project> --key <KEY>`); never edit it. A
-project with no backlog yet starts with `opc task init <project> --key <KEY>`.
-
 Prompts are sessions, not tasks: one scratch folder per unit of work
 (`prompts/<date>-<slug>/`), attached with `--prompt` at creation or later via
 `opc task edit`. When a task closes, archive its folder; leftover work becomes a

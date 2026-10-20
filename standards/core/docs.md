@@ -30,7 +30,7 @@
 ### Scratch and evidence
 
 - Prompts, active plans, research notes, and artifacts live in the scratch root
-  registered in `projects.json` (`~/dev/.onepersonco/<project>/`) — never
+  registered in `projects.json` (`~/.onepersonco/<project>/`) — never
   committed. Durable knowledge graduates into the repo or it does not count.
 - No new `plans/` (or research) folders in repos. Existing committed plan and
   research documents are grandfathered and may stay, but new working plans live

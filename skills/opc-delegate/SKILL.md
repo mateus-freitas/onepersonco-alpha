@@ -17,7 +17,7 @@ You are the orchestrator. You own architecture, interfaces, integration, and
    (`opencode-go/deepseek-v4.1-flash`); step up only on evidence (failed
    attempts, genuine complexity). Record model and effort in the task record.
 3. **Write a complete brief** as `TASK.md` in the task's scratch folder
-   (`~/dev/.onepersonco/<project>/prompts/<YYYY-MM-DD>-<slug>/`; template:
+   (`~/.onepersonco/<project>/prompts/<YYYY-MM-DD>-<slug>/`; template:
    the hub's `standards/templates/prompt-folder.md`). A brief carries: the task
    ID (`Task: GYM-142`), workdir and owned files, the exact deliverable, how to
    verify, the forbidden actions ("do not commit, push, or merge — leave the

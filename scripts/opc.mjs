@@ -257,7 +257,7 @@ function git(dir, args) {
 // its scope only.
 
 const WORKTREE_ROOTS = [
-  { root: "opc", base: () => expand(registry.worktreesRoot || "~/dev/.onepersonco/worktrees") },
+  { root: "opc", base: () => expand(registry.worktreesRoot || "~/.onepersonco/worktrees") },
   { root: "t3", base: () => path.join(os.homedir(), ".t3", "worktrees") },
   { root: "legacy", base: () => path.join(os.homedir(), "dev", "agents-worktrees") },
 ];
@@ -2066,7 +2066,7 @@ async function cmdConsole(args) {
       const roots = [
         HUB,
         expand(registry.scratchRoot),
-        expand(registry.worktreesRoot || "~/dev/.onepersonco/worktrees"),
+        expand(registry.worktreesRoot || "~/.onepersonco/worktrees"),
         path.join(os.homedir(), ".t3", "worktrees"),
         path.join(os.homedir(), "dev", "agents-worktrees"),
         ...registry.projects.map((p) => expand(p.path)),

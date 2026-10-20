@@ -14,7 +14,7 @@
   `opc task add` for discoveries and `opc task done <id> --pr <url>` once each
   PR merges. Missing bookkeeping is a CLI call, not a commit.
 - Isolated worktrees live under the worktrees root in `projects.json`
-  (`~/dev/.onepersonco/worktrees/<project>/<slug>/`); app-managed checkouts
+  (`~/.onepersonco/worktrees/<project>/<slug>/`); app-managed checkouts
   (T3's `~/.t3/worktrees/`) are acceptable; legacy paths are grandfathered.
 - `opc sync`/`opc check` are checkout-aware: run them from inside the worktree
   you are changing and they target that checkout, so drift and "sync is a

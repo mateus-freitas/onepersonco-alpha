@@ -27,7 +27,7 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
    - A step-by-step procedure for people → `docs/guides/`.
    - Product-user text → `docs/user/`; maintainer procedures → `docs/operations/`.
    - Proof of what happened → `docs/evidence/` or the PR body.
-   - Everything else → scratch (`~/dev/.onepersonco/<project>/`) — and it dies
+   - Everything else → scratch (`~/.onepersonco/<project>/`) — and it dies
      there. Nothing temporary is committed.
 3. **Graduate.** If the work produced durable knowledge, write it now:
    distill into `internals/` or an RFC/ADR — new, or an update to an existing
