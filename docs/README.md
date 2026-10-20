@@ -9,8 +9,8 @@
 | `evidence/` | both | proof and outcomes for finished hub tasks |
 
 The work queue is not a repo file: it is the hub's task store at
-`~/.onepersonco/onepersonco-alpha/backlog.md`, written only by `opc task` and the
-console.
+`~/.onepersonco/onepersonco-alpha/backlog.md` (history in
+`backlog.archive.jsonl`), written only by `opc task` and the console.
 
 Authority: `AGENTS.md` (always read) → `standards/` → `internals/`. The task
 store sequences work; it never invents rules.

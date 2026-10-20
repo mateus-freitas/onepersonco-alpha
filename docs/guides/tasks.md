@@ -1,14 +1,19 @@
 # Tasks
 
-The backlog is one markdown file per project at `~/.onepersonco/<project>/backlog.md`,
-written only through `opc task` or the console — never edited or committed.
+The live backlog is one markdown file per project at
+`~/.onepersonco/<project>/backlog.md`; canceled and older done tasks live in
+`backlog.archive.jsonl` beside it. Both are written only through `opc task` or
+the console — never edited or committed.
 
 ## Read
 
 ```sh
-opc task list gymbloc              # every task, grouped by section
+opc task list gymbloc              # live tasks, grouped by section
+opc task list gymbloc --all        # include archived history
+opc task list gymbloc --section Canceled
 opc task list gymbloc --json       # for scripts
-opc task show GYM-142
+opc task show GYM-142              # searches live and archive
+opc task search gymbloc "keyboard" # titles/descriptions, live and archive
 ```
 
 IDs are `KEY-N` (`GYM-142`): assigned on add, stable, never reused. Cite the ID
@@ -21,12 +26,18 @@ opc task add gymbloc "Rest timer between sets" --priority p1 \
   --spec docs/specs/rest-timer.md
 opc task move GYM-142 Now --before GYM-140
 opc task edit GYM-142 --prompt prompts/2026-10-20-rest-timer
-opc task cancel GYM-143
+opc task cancel GYM-143              # archived, not deleted
+opc task restore GYM-143 --section Next
 ```
 
 The project argument is the `id` from `projects.json`. `add` takes `--section`;
 `add`/`edit` take `--priority p0..p3`, `--spec`, `--prompt`, `--desc` (`edit`
 replaces them later, never the ID); `--before`, `--top`, `--end` place the move.
+`restore` reopens a canceled or archived task with the same ID.
+
+Done keeps the 25 most recent completions in `backlog.md`; older ones move to the
+archive automatically on the next completion. `opc task trim gymbloc` enforces
+the window on demand (normally unnecessary).
 
 ## After a merge
 
@@ -34,13 +45,15 @@ replaces them later, never the ID); `--before`, `--top`, `--end` place the move.
 opc task done GYM-142 --pr https://github.com/…/pull/57
 ```
 
-It stamps the date and is idempotent (`GYM-142 already done`). Leftover work
-becomes a new task with `opc task add` — not a note or a follow-up branch.
+It stamps the date and is idempotent (`GYM-142 already done`; an archived task
+answers `already done (archived)`). Leftover work becomes a new task with
+`opc task add` — not a note or a follow-up branch.
 
 ## Console
 
 The board uses the same writer: drag a card to move it, create from the dialog,
-cancel from the drawer. Projects without a store are read-only with a hint.
+cancel from the drawer (the task goes to the archive; the CLI can restore it).
+Projects without a store are read-only with a hint.
 
 ## Legacy
 

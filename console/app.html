@@ -645,7 +645,7 @@ function drawerHTML(t) {
     : '<span class="lref" title="' + esc(fileRef + " line " + t.line) + '">L' + esc(t.line) + "</span>";
   return '<div class="td-head"><div class="td-crumb"><span class="dot ' + pclass(t.project) + '"></span>' + esc(t.project) + " · " + esc(t.section.toLowerCase()) + "</div>" +
     '<div class="td-actions">' +
-    (LIVE && t.store ? '<button class="btn danger" id="task-cancel" title="Remove ' + esc(t.id) + ' from the task store — IDs are never reused">cancel</button>' : "") +
+    (LIVE && t.store ? '<button class="btn danger" id="task-cancel" title="Move ' + esc(t.id) + ' to the archive — restore with opc task restore ' + esc(t.id) + '">cancel</button>' : "") +
     '<button class="btn" id="task-close" title="Close (Esc)">✕</button></div></div>' +
     '<div class="td-title' + (t.checked ? " done" : "") + '">' + ref + esc(t.title) + "</div>" +
     (t.desc ? '<div class="td-desc">' + esc(t.desc) + "</div>" : "") +
@@ -709,12 +709,12 @@ async function cancelTask() {
   const key = state.openKey;
   const t = key && taskByKey(key);
   if (!LIVE || !t || !t.store || writing) return;
-  if (!confirm('Cancel "' + t.title + '"?\n\nRemoves ' + t.id + " from " + taskFile(t) + " · line " + t.line + ".\nIDs are never reused; the prompt folder stays.")) return;
+  if (!confirm('Cancel "' + t.title + '"?\n\nMoves ' + t.id + " to the archive (backlog.archive.jsonl).\nRestore with opc task restore " + t.id + ". IDs are never reused; the prompt folder stays.")) return;
   writing = true;
   try {
     const out = await postJSON("/task/cancel", { id: t.id });
     if (out.data) applyData(out.data);
-    toast("canceled " + t.id);
+    toast("canceled " + t.id + " — archived");
   } catch (err) {
     toast("cancel failed — " + err.message);
   } finally {

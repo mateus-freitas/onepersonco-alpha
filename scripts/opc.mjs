@@ -6,7 +6,8 @@
 // scan   write console/data.json (+ --snapshot for a self-contained page)
 // console serve the local console; /data.json rescans on every load, and
 //         /task/add + /task/move + /task/cancel edit the task store behind locks
-// task   control-plane task store: add, list, show, move, done, cancel, migrate
+// task   control-plane task store: add, list, show, search, move, edit, done,
+//        cancel, restore, trim, migrate, init; history lives in a JSONL archive
 
 
 import fs from "node:fs";
@@ -24,6 +25,9 @@ const consoleDir = path.join(HUB, "console");
 
 const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
 const SECTIONS = ["Now", "Next", "Later", "Done"];
+// The live store keeps only the most recent completions; older done tasks
+// spill to backlog.archive.jsonl, which also holds every canceled task.
+const DONE_KEEP = 25;
 // Backlog line grammar, shared by parseBacklog (read) and the task store
 // (write) — both must agree on where a task line and its `D:` lines end.
 const TASK_LINE_RE = /^-\s+\[( |x|X)\]\s+(.+)$/;
@@ -443,6 +447,37 @@ async function collectWorktrees() {
   return { byId: new Map(repos.map((r) => [r.id, r.entries.map((e) => e.entry)])), gh };
 }
 
+function parseTaskLine(line) {
+  const item = line.match(TASK_LINE_RE);
+  if (!item) return null;
+  let rest = item[2].trim();
+  let id = null;
+  let spec = null;
+  let prompt = null;
+  let priority = null;
+  let date = null;
+  const idM = rest.match(TASK_ID_RE);
+  if (idM) { id = idM[1]; rest = rest.slice(idM[0].length); }
+  const specM = rest.match(/\s+—\s+spec:\s+(\S+)/);
+  if (specM) { spec = specM[1]; rest = rest.replace(specM[0], ""); }
+  const promptM = rest.match(/\s+—\s+prompt:\s+(\S+)/);
+  if (promptM) { prompt = promptM[1]; rest = rest.replace(promptM[0], ""); }
+  const priM = rest.match(/\s+—\s+(p[0-3]|P[0-3])\s*$/);
+  if (priM) { priority = priM[1].toLowerCase(); rest = rest.replace(priM[0], ""); }
+  const dateM = rest.match(/\s+—\s+(\d{4}-\d{2}-\d{2})\s*$/);
+  if (dateM) { date = dateM[1]; rest = rest.replace(dateM[0], ""); }
+  return {
+    id,
+    title: rest.trim(),
+    desc: null,
+    spec,
+    prompt,
+    priority,
+    date,
+    checked: item[1].toLowerCase() === "x",
+  };
+}
+
 function parseBacklog(file) {
   if (!fs.existsSync(file)) return null;
   const sections = { Now: [], Next: [], Later: [], Done: [] };
@@ -457,35 +492,9 @@ function parseBacklog(file) {
       return;
     }
     if (!current) return;
-    const item = line.match(TASK_LINE_RE);
+    const item = parseTaskLine(line);
     if (item) {
-      let rest = item[2].trim();
-      let id = null;
-      let spec = null;
-      let prompt = null;
-      let priority = null;
-      let date = null;
-      const idM = rest.match(TASK_ID_RE);
-      if (idM) { id = idM[1]; rest = rest.slice(idM[0].length); }
-      const specM = rest.match(/\s+—\s+spec:\s+(\S+)/);
-      if (specM) { spec = specM[1]; rest = rest.replace(specM[0], ""); }
-      const promptM = rest.match(/\s+—\s+prompt:\s+(\S+)/);
-      if (promptM) { prompt = promptM[1]; rest = rest.replace(promptM[0], ""); }
-      const priM = rest.match(/\s+—\s+(p[0-3]|P[0-3])\s*$/);
-      if (priM) { priority = priM[1].toLowerCase(); rest = rest.replace(priM[0], ""); }
-      const dateM = rest.match(/\s+—\s+(\d{4}-\d{2}-\d{2})\s*$/);
-      if (dateM) { date = dateM[1]; rest = rest.replace(dateM[0], ""); }
-      last = {
-        id,
-        title: rest.trim(),
-        desc: null,
-        spec,
-        prompt,
-        priority,
-        date,
-        checked: item[1].toLowerCase() === "x",
-        line: i + 1,
-      };
+      last = { ...item, line: i + 1 };
       sections[current].push(last);
       return;
     }
@@ -791,7 +800,11 @@ function checkBacklog(p, dir, add) {
   if (!source.legacy) {
     if (!p.key || !TASK_KEY_RE.test(p.key)) add("error", "backlog.key", "missing or invalid task key in projects.json", "projects.json");
     const meta = readMeta(p);
-    const max = maxIdNumber(backlog, p.key || "");
+    const archive = parseArchive(archiveFile(p));
+    const archiveRel = displayFile(archive.file);
+    for (const e of archive.errors)
+      add("error", "backlog.archive", `archive line ${e.line}: ${e.message}`, archiveRel);
+    const max = Math.max(maxIdNumber(backlog, p.key || ""), archiveMaxId(archive, p.key || ""));
     if (p.key && (!Number.isInteger(meta.next) || meta.next <= max))
       add("error", "backlog.meta", `backlog.meta.json next (${meta.next}) must exceed the highest ID (${max})`, rel);
     const seenIds = new Set();
@@ -804,6 +817,15 @@ function checkBacklog(p, dir, add) {
         seenIds.add(item.id);
       }
     }
+    for (const { data, line } of archive.records) {
+      if (p.key && !data.id.startsWith(`${p.key}-`))
+        add("error", "backlog.id", `archive line ${line + 1}: ${data.id} does not match key ${p.key}`, archiveRel);
+      if (seenIds.has(data.id))
+        add("error", "backlog.id", `duplicate task ID ${data.id} (live + archive)`, archiveRel);
+      seenIds.add(data.id);
+    }
+    if (backlog.Done.length > DONE_KEEP)
+      add("warning", "backlog.done-overflow", `Done has ${backlog.Done.length} tasks (keeps ${DONE_KEEP}); the next completion archives the oldest`, rel);
   }
   const openTitles = new Map();
   for (const s of SECTIONS) {
@@ -971,7 +993,182 @@ function cmdCheck(args) {
 function storeDir(id) { return path.join(expand(registry.scratchRoot), id); }
 function storeFile(p) { return path.join(storeDir(p.id), "backlog.md"); }
 function metaFile(p) { return path.join(storeDir(p.id), "backlog.meta.json"); }
+function archiveFile(p) { return path.join(storeDir(p.id), "backlog.archive.jsonl"); }
 function repoBacklogFile(p) { return path.join(expand(p.path), p.docs || "docs", "backlog.md"); }
+
+// The archive is machine-written history: one JSON object per line (JSONL).
+// Done tasks spill here once the live file holds DONE_KEEP completions; cancel
+// appends here instead of deleting. The live markdown stays small and human.
+
+function archiveEntryFromTask(task, status, finished) {
+  if (!task || !task.id) throw new Error("cannot archive a task without an ID");
+  const entry = { id: task.id, title: task.title, status, finished };
+  if (task.desc) entry.desc = task.desc;
+  if (task.spec) entry.spec = task.spec;
+  if (task.prompt) entry.prompt = task.prompt;
+  if (task.priority) entry.priority = task.priority;
+  return entry;
+}
+
+// The live task block (line + its D: lines) as a parsed task. Used by the
+// archive writer before the file is rewritten, so it reads the in-memory lines
+// rather than the not-yet-written store.
+function taskFromBlock(lines, t) {
+  const task = parseTaskLine(t.line);
+  if (!task) return null;
+  for (let i = t.start + 1; i <= t.end; i++) {
+    const m = lines[i].match(DESC_LINE_RE);
+    if (m) task.desc = task.desc ? `${task.desc} ${m[1]}` : m[1];
+  }
+  return task;
+}
+
+function taskBlockFromEntry(entry) {
+  let line = `- [ ] ${entry.id} · ${entry.title}`;
+  if (entry.spec) line += ` — spec: ${entry.spec}`;
+  if (entry.prompt) line += ` — prompt: ${entry.prompt}`;
+  if (entry.priority) line += ` — ${entry.priority}`;
+  const block = [line];
+  if (entry.desc) {
+    for (const d of String(entry.desc).split("\n").map((s) => s.trim()).filter(Boolean))
+      block.push(`  D: ${d}`);
+  }
+  return block;
+}
+
+function archiveEntryProblem(e) {
+  if (!e || typeof e !== "object" || Array.isArray(e)) return "not a JSON object";
+  if (typeof e.id !== "string" || !/^[A-Z][A-Z0-9]{1,5}-\d+$/.test(e.id)) return "id must be KEY-N";
+  if (typeof e.title !== "string" || !e.title.trim()) return "title must be a non-empty string";
+  if (e.status !== "done" && e.status !== "canceled") return 'status must be "done" or "canceled"';
+  if (typeof e.finished !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e.finished)) return "finished must be YYYY-MM-DD";
+  for (const k of ["desc", "spec", "prompt"]) if (e[k] != null && typeof e[k] !== "string") return `${k} must be a string`;
+  if (e.priority != null && !/^p[0-3]$/.test(e.priority)) return "priority must be p0..p3";
+  return null;
+}
+
+// Parse every line without throwing so `opc check` can report each bad record.
+// `records` keeps the raw line index for rewrite/remove operations.
+function parseArchive(file) {
+  const out = { file, records: [], lines: [], errors: [] };
+  if (!fs.existsSync(file)) return out;
+  const text = fs.readFileSync(file, "utf8");
+  out.lines = text.split("\n");
+  if (text.endsWith("\n")) out.lines.pop();
+  out.lines.forEach((line, i) => {
+    if (!line.trim()) return;
+    let data;
+    try { data = JSON.parse(line); } catch (err) {
+      out.errors.push({ line: i + 1, message: `invalid JSON: ${err.message}` });
+      return;
+    }
+    const problem = archiveEntryProblem(data);
+    if (problem) { out.errors.push({ line: i + 1, message: problem }); return; }
+    out.records.push({ data, line: i, raw: line });
+  });
+  return out;
+}
+
+function readArchive(p) {
+  const parsed = parseArchive(archiveFile(p));
+  if (parsed.errors.length) {
+    const e = parsed.errors[0];
+    throw new Error(`${displayFile(parsed.file)}:${e.line}: ${e.message} — run opc check`);
+  }
+  return parsed;
+}
+
+function archiveMaxId(parsed, key) {
+  let max = 0;
+  for (const { data } of parsed.records) {
+    if (!data.id.startsWith(`${key}-`)) continue;
+    max = Math.max(max, Number(data.id.slice(key.length + 1)) || 0);
+  }
+  return max;
+}
+
+function appendArchive(p, entries) {
+  if (!entries.length) return;
+  const file = archiveFile(p);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  let text = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
+  if (fs.existsSync(file)) {
+    const size = fs.statSync(file).size;
+    if (size > 0) {
+      const fd = fs.openSync(file, "r");
+      const last = Buffer.alloc(1);
+      fs.readSync(fd, last, 0, 1, size - 1);
+      fs.closeSync(fd);
+      if (last[0] !== 0x0a) text = "\n" + text;
+    }
+  }
+  const fd = fs.openSync(file, "a");
+  try {
+    const buf = Buffer.from(text, "utf8");
+    let off = 0;
+    while (off < buf.length) off += fs.writeSync(fd, buf, off, buf.length - off);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function rewriteArchive(p, records) {
+  const text = records.map((r) => r.raw).join("\n") + (records.length ? "\n" : "");
+  writeAtomic(archiveFile(p), text);
+}
+
+function removeArchiveId(p, id) {
+  const parsed = readArchive(p);
+  const records = parsed.records.filter((r) => r.data.id !== id);
+  if (records.length === parsed.records.length) throw new Error(`${id} is not in the archive`);
+  rewriteArchive(p, records);
+}
+
+function updateArchiveEntry(p, id, patch) {
+  const parsed = readArchive(p);
+  let found = false;
+  const records = parsed.records.map((r) => {
+    if (r.data.id !== id) return r;
+    found = true;
+    const data = { ...r.data, ...patch };
+    return { ...r, data, raw: JSON.stringify(data) };
+  });
+  if (!found) throw new Error(`${id} is not in the archive`);
+  rewriteArchive(p, records);
+}
+
+// Move the oldest completions beyond DONE_KEEP into the archive. Appends first
+// and rewrites the live file after, so a crash can duplicate a record (check
+// catches it) but can never lose the task.
+function spillDone(p, lines) {
+  const overflow = listTasks(lines).filter((t) => t.section === "Done").slice(DONE_KEEP);
+  if (!overflow.length) return 0;
+  const archivedIds = new Set(readArchive(p).records.map((r) => r.data.id));
+  const entries = [];
+  for (const t of overflow) {
+    const task = taskFromBlock(lines, t);
+    if (!task) continue;
+    // An earlier spill may have appended the record and crashed before the
+    // live rewrite; removing the live copy is enough to finish that attempt.
+    if (!archivedIds.has(task.id))
+      entries.push(archiveEntryFromTask(task, "done", task.date || todayISO()));
+  }
+  if (entries.length) appendArchive(p, entries);
+  for (const t of [...overflow].sort((a, b) => b.start - a.start))
+    lines.splice(t.start, t.end - t.start + 1);
+  return overflow.length;
+}
+
+async function trimDone(p) {
+  return withTaskLock(p, () => {
+    const file = requireStore(p);
+    const { lines, endsNL } = readLines(file);
+    const n = spillDone(p, lines);
+    if (n) writeLines(file, lines, endsNL);
+    return n;
+  });
+}
 
 function backlogSource(p) {
   const store = storeFile(p);
@@ -1138,7 +1335,9 @@ async function taskAdd(p, fields) {
       }
     }
     const meta = readMeta(p);
-    const id = `${p.key}-${Math.max(Number(meta.next) || 1, maxIdNumber(backlog, p.key) + 1)}`;
+    const archived = readArchive(p);
+    const max = Math.max(maxIdNumber(backlog, p.key), archiveMaxId(archived, p.key));
+    const id = `${p.key}-${Math.max(Number(meta.next) || 1, max + 1)}`;
     let line = taskLine(id, title);
     if (fields.spec) line += ` — spec: ${fields.spec}`;
     if (fields.prompt) line += ` — prompt: ${fields.prompt}`;
@@ -1149,6 +1348,7 @@ async function taskAdd(p, fields) {
       .map((d) => `  D: ${d}`)];
     const at = insertItem(lines, section, 0, block);
     if (at === false) throw new Error(`backlog has no "## ${section}" section`);
+    if (section === "Done") spillDone(p, lines);
     writeLines(file, lines, endsNL);
     writeMeta(p, { ...meta, key: p.key, next: Number(id.slice(p.key.length + 1)) + 1 });
     return { id, section, index: at };
@@ -1162,7 +1362,12 @@ async function taskMove(p, id, to, before) {
     const { lines, endsNL } = readLines(file);
     const tasks = listTasks(lines);
     const from = tasks.find((t) => taskIdOf(t.line) === id);
-    if (!from) throw new Error(`task not found: ${id}`);
+    if (!from) {
+      const archived = readArchive(p).records.find((r) => r.data.id === id);
+      if (archived)
+        throw new Error(`${id} is archived (${archived.data.status}) — run \`opc task restore ${id}\` to reopen it`);
+      throw new Error(`task not found: ${id}`);
+    }
     let anchor = null;
     if (before !== undefined && before !== null) {
       if (before === id) throw new Error("cannot anchor a task on itself");
@@ -1194,6 +1399,7 @@ async function taskMove(p, id, to, before) {
       lines.splice(from.start, 1);
     const at = insertItem(lines, to, k, [line]);
     if (at === false) throw new Error(`backlog has no "## ${to}" section`);
+    if (to === "Done") spillDone(p, lines);
     writeLines(file, lines, endsNL);
     return { section: to, index: at };
   });
@@ -1204,12 +1410,27 @@ async function taskCancel(p, id) {
     const file = requireStore(p);
     const { lines, endsNL } = readLines(file);
     const found = listTasks(lines).find((t) => taskIdOf(t.line) === id);
-    if (!found) throw new Error(`task not found: ${id}`);
+    const archived = readArchive(p).records.find((r) => r.data.id === id);
+    if (!found) {
+      if (archived) throw new Error(`${id} is already archived (${archived.data.status}) — restore it first`);
+      throw new Error(`task not found: ${id}`);
+    }
+    if (archived) {
+      // An interrupted cancel left the record in both files; finish the
+      // removal instead of appending a duplicate.
+      if (archived.data.status !== "canceled")
+        updateArchiveEntry(p, id, { status: "canceled", finished: todayISO() });
+    } else {
+      const task = taskFromBlock(lines, found);
+      if (!task) throw new Error(`task not found: ${id}`);
+      appendArchive(p, [archiveEntryFromTask(task, "canceled", todayISO())]);
+    }
     lines.splice(found.start, found.end - found.start + 1);
     if (lines[found.start - 1] !== undefined && lines[found.start - 1].trim() === "" &&
         lines[found.start] !== undefined && lines[found.start].trim() === "")
       lines.splice(found.start, 1);
     writeLines(file, lines, endsNL);
+    return { id, archived: true };
   });
 }
 
@@ -1218,7 +1439,12 @@ async function taskEdit(p, id, fields) {
     const file = requireStore(p);
     const { lines, endsNL } = readLines(file);
     const found = listTasks(lines).find((t) => taskIdOf(t.line) === id);
-    if (!found) throw new Error(`task not found: ${id}`);
+    if (!found) {
+      const archived = readArchive(p).records.find((r) => r.data.id === id);
+      if (archived)
+        throw new Error(`${id} is archived (${archived.data.status}) — run \`opc task restore ${id}\` to reopen it`);
+      throw new Error(`task not found: ${id}`);
+    }
     const backlog = parseBacklog(file);
     const current = findTask(backlog, id);
     if (!current) throw new Error(`task not found: ${id}`);
@@ -1268,9 +1494,14 @@ async function taskEdit(p, id, fields) {
 async function taskDone(p, id, pr) {
   const file = requireStore(p);
   const found = findTask(parseBacklog(file), id);
-  if (!found) throw new Error(`task not found: ${id}`);
-  let result = { section: found.section, index: found.index };
-  if (found.section === "Done") {
+  let result;
+  if (!found) {
+    const archived = readArchive(p).records.find((r) => r.data.id === id);
+    if (!archived) throw new Error(`task not found: ${id}`);
+    if (archived.data.status !== "done")
+      throw new Error(`${id} was canceled — run \`opc task restore ${id}\` to reopen it`);
+    result = { noop: true, archived: true };
+  } else if (found.section === "Done") {
     if (found.task.checked && found.task.date) {
       result = { noop: true };
     } else {
@@ -1283,6 +1514,7 @@ async function taskDone(p, id, pr) {
         return { section: "Done", index: found.index };
       });
     }
+    await trimDone(p);
   } else {
     result = await taskMove(p, id, "Done", undefined);
   }
@@ -1297,15 +1529,32 @@ async function taskDone(p, id, pr) {
   return result;
 }
 
-function taskList(p, section) {
-  if (section && !SECTIONS.includes(section)) throw new Error(`unknown section: ${section}`);
+function taskList(p, section, opts = {}) {
+  if (section && !SECTIONS.includes(section) && section !== "Canceled")
+    throw new Error(`unknown section: ${section}`);
   const source = backlogSource(p);
   if (!source) throw new Error(`no task store for ${p.id}`);
-  const backlog = parseBacklog(source.file);
   const out = [];
-  for (const s of SECTIONS) {
-    if (section && s !== section) continue;
-    for (const item of backlog[s]) out.push({ ...item, section: s, legacy: source.legacy });
+  if (opts.archived !== true && section !== "Canceled") {
+    const backlog = parseBacklog(source.file);
+    for (const s of SECTIONS) {
+      if (section && s !== section) continue;
+      for (const item of backlog[s]) out.push({ ...item, section: s, legacy: source.legacy });
+    }
+  }
+  if (opts.all || opts.archived || section === "Canceled") {
+    for (const { data } of readArchive(p).records) {
+      const archivedSection = data.status === "done" ? "Done" : "Canceled";
+      if (section && section !== archivedSection) continue;
+      out.push({
+        ...data,
+        section: archivedSection,
+        checked: data.status === "done",
+        date: data.finished,
+        archived: true,
+        legacy: false,
+      });
+    }
   }
   return out;
 }
@@ -1313,9 +1562,71 @@ function taskList(p, section) {
 function taskShow(id) {
   const p = findProjectById(id);
   if (!p) throw new Error(`task not found: ${id}`);
+  const source = backlogSource(p);
+  if (!source) throw new Error(`no task store for ${p.id}`);
   const item = taskList(p).find((t) => t.id === id);
-  if (!item) throw new Error(`task not found: ${id}`);
-  return { project: p, item, source: backlogSource(p) };
+  if (item) return { project: p, item, source };
+  const archive = readArchive(p);
+  const rec = archive.records.find((r) => r.data.id === id);
+  if (!rec) throw new Error(`task not found: ${id}`);
+  const data = rec.data;
+  return {
+    project: p,
+    item: {
+      ...data,
+      section: data.status === "done" ? "Done" : "Canceled",
+      checked: data.status === "done",
+      date: data.finished,
+      archived: true,
+      line: null,
+    },
+    source: { file: archive.file, legacy: false, archived: true },
+  };
+}
+
+async function taskRestore(p, id, to = "Now") {
+  if (!["Now", "Next", "Later"].includes(to))
+    throw new Error("restore target must be Now, Next or Later");
+  return withTaskLock(p, () => {
+    const file = requireStore(p);
+    const { lines, endsNL } = readLines(file);
+    const live = listTasks(lines).find((t) => taskIdOf(t.line) === id);
+    const archive = readArchive(p);
+    const rec = archive.records.find((r) => r.data.id === id);
+    if (!rec) {
+      if (live) throw new Error(`${id} is already in the backlog (${live.section})`);
+      throw new Error(`task not found in the archive: ${id}`);
+    }
+    if (live) {
+      // An interrupted restore left the task in both files; finish by removing
+      // the archive copy.
+      removeArchiveId(p, id);
+      return { id, section: live.section, repaired: true };
+    }
+    const backlog = parseBacklog(file);
+    for (const s of ["Now", "Next", "Later"]) {
+      for (const item of backlog[s]) {
+        if (item.id !== id && normalizeTitle(item.title) === normalizeTitle(rec.data.title))
+          throw new Error(`duplicate: ${item.id} already has that title`);
+      }
+    }
+    const block = taskBlockFromEntry(rec.data);
+    const at = insertItem(lines, to, 0, block);
+    if (at === false) throw new Error(`backlog has no "## ${to}" section`);
+    writeLines(file, lines, endsNL);
+    removeArchiveId(p, id);
+    return { id, section: to, index: at };
+  });
+}
+
+function taskSearch(p, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) throw new Error("search needs a non-empty query");
+  return taskList(p, null, { all: true }).filter((t) =>
+    [t.id, t.title, t.desc, t.spec, t.prompt]
+      .filter(Boolean)
+      .some((v) => String(v).toLowerCase().includes(q))
+  );
 }
 
 async function taskMigrate(projectId, keyArg, dryRun) {
@@ -1324,6 +1635,8 @@ async function taskMigrate(projectId, keyArg, dryRun) {
   if (!p) throw new Error(`unknown project: ${projectId}`);
   if (!fs.existsSync(repoBacklogFile(p))) throw new Error(`${p.id}: no docs/backlog.md to migrate`);
   if (fs.existsSync(storeFile(p))) throw new Error(`${p.id}: task store already exists — ${displayFile(storeFile(p))}`);
+  if (fs.existsSync(archiveFile(p)))
+    throw new Error(`${p.id}: an archive exists without a live store — inspect ${displayFile(archiveFile(p))}`);
   const key = String(keyArg || p.key || "").toUpperCase();
   if (!TASK_KEY_RE.test(key)) throw new Error("choose a task key, e.g. --key GYM (2-6 letters/digits, starting with a letter)");
   const other = registry.projects.find((x) => x.key === key && x.id !== p.id);
@@ -1341,6 +1654,7 @@ async function taskMigrate(projectId, keyArg, dryRun) {
   fs.mkdirSync(storeDir(p.id), { recursive: true });
   writeLines(storeFile(p), migrated, endsNL);
   writeMeta(p, { key, next: n + 1 });
+  await trimDone(p);
   if (p.key !== key) {
     p.key = key;
     fs.writeFileSync(path.join(HUB, "projects.json"), JSON.stringify(registry, null, 2) + "\n");
@@ -1356,10 +1670,13 @@ async function taskInit(p, keyArg) {
   return withTaskLock(p, () => {
     if (fs.existsSync(storeFile(p)))
       throw new Error(`${p.id}: task store already exists — ${displayFile(storeFile(p))}`);
+    if (fs.existsSync(archiveFile(p)))
+      throw new Error(`${p.id}: an archive exists without a live store — inspect ${displayFile(archiveFile(p))}`);
     const lines = [
       "# Backlog", "",
       `Task store for ${p.id}. Written by \`opc task\` and the console only.`,
-      "Sections: Now · Next · Later · Done (recent).", "",
+      `Sections: Now · Next · Later · Done (recent). Done keeps the ${DONE_KEEP} most`,
+      "recent; older completions and canceled tasks live in backlog.archive.jsonl.", "",
       "## Now", "", "## Next", "", "## Later", "", "## Done (recent)", "",
     ];
     writeLines(storeFile(p), lines, true);
@@ -1377,7 +1694,8 @@ function parseTaskArgs(argv) {
   const flags = { desc: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--json" || arg === "--dry-run" || arg === "--top" || arg === "--end") {
+    if (arg === "--json" || arg === "--dry-run" || arg === "--top" || arg === "--end" ||
+        arg === "--all" || arg === "--archived") {
       flags[arg.slice(2)] = true;
     } else if (arg.startsWith("--")) {
       const name = arg.slice(2);
@@ -1418,11 +1736,12 @@ async function cmdTask(args) {
   }
   if (sub === "list") {
     const p = projectOf(pos[0] || "");
-    const items = taskList(p, flags.section);
+    const items = taskList(p, flags.section, { all: flags.all, archived: flags.archived });
     if (flags.json) return console.log(JSON.stringify(items, null, 2));
     if (!items.length) return console.log("no tasks");
     for (const t of items) {
-      console.log(`${(t.id || "(no id)").padEnd(9)} ${t.checked ? "[x]" : "[ ]"} ${t.priority ? t.priority + " " : ""}${t.title}  (${t.section})`);
+      const box = t.status === "canceled" ? "[~]" : t.checked ? "[x]" : "[ ]";
+      console.log(`${(t.id || "(no id)").padEnd(9)} ${box} ${t.priority ? t.priority + " " : ""}${t.title}  (${t.section}${t.archived ? " · archived" : ""})`);
     }
     return;
   }
@@ -1431,11 +1750,14 @@ async function cmdTask(args) {
     const { project, item, source } = taskShow(id);
     if (flags.json) return console.log(JSON.stringify({ ...item, project: project.id, file: displayFile(source.file) }, null, 2));
     console.log(`${item.id} · ${item.title}`);
-    console.log(`  ${item.section} · ${item.checked ? "done " + (item.date || "") : "open"}${item.priority ? " · " + item.priority : ""}`);
+    const state = item.archived
+      ? `archived · ${item.status} ${item.finished}`
+      : `${item.section} · ${item.checked ? "done " + (item.date || "") : "open"}`;
+    console.log(`  ${state}${item.priority ? " · " + item.priority : ""}`);
     if (item.desc) console.log(`  ${item.desc}`);
     if (item.spec) console.log(`  spec: ${item.spec}`);
     if (item.prompt) console.log(`  prompt: ${item.prompt}`);
-    console.log(`  ${displayFile(source.file)} · line ${item.line}`);
+    console.log(`  ${displayFile(source.file)}${item.line ? " · line " + item.line : ""}`);
     return;
   }
   if (sub === "move") {
@@ -1466,7 +1788,7 @@ async function cmdTask(args) {
     const p = findProjectById(id || "");
     if (!p) throw new Error(`task not found: ${id || "(missing)"}`);
     const out = await taskDone(p, id, flags.pr);
-    console.log(out.noop ? `${id} already done` : `${id} → Done`);
+    console.log(out.noop ? (out.archived ? `${id} already done (archived)` : `${id} already done`) : `${id} → Done`);
     return;
   }
   if (sub === "cancel") {
@@ -1474,7 +1796,35 @@ async function cmdTask(args) {
     const p = findProjectById(id || "");
     if (!p) throw new Error(`task not found: ${id || "(missing)"}`);
     await taskCancel(p, id);
-    console.log(`${id} canceled`);
+    console.log(`${id} canceled → archive`);
+    return;
+  }
+  if (sub === "restore") {
+    const id = pos[0];
+    const p = findProjectById(id || "");
+    if (!p) throw new Error(`task not found: ${id || "(missing)"}`);
+    const out = await taskRestore(p, id, flags.section || "Now");
+    console.log(`${id} restored to ${out.section}${out.repaired ? " (repaired)" : ""}`);
+    return;
+  }
+  if (sub === "search") {
+    const [projectId, ...words] = pos;
+    if (!projectId || !words.length)
+      throw new Error('usage: opc task search <project> "<text>" [--json]');
+    const p = projectOf(projectId);
+    const items = taskSearch(p, words.join(" "));
+    if (flags.json) return console.log(JSON.stringify(items, null, 2));
+    if (!items.length) return console.log("no matches");
+    for (const t of items) {
+      const box = t.status === "canceled" ? "[~]" : t.checked ? "[x]" : "[ ]";
+      console.log(`${(t.id || "(no id)").padEnd(9)} ${box} ${t.title}  (${t.section}${t.archived ? " · archived" : ""})`);
+    }
+    return;
+  }
+  if (sub === "trim") {
+    const p = projectOf(pos[0] || "");
+    const n = await trimDone(p);
+    console.log(n ? `archived ${n} old done task(s)` : "nothing to trim");
     return;
   }
   if (sub === "migrate") {
@@ -1490,7 +1840,7 @@ async function cmdTask(args) {
     console.log(`initialized ${out.project} · ${out.key} → ${out.file}`);
     return;
   }
-  throw new Error("usage: opc task add|list|show|move|edit|done|cancel|migrate|init");
+  throw new Error("usage: opc task add|list|show|search|move|edit|done|cancel|restore|trim|migrate|init");
 }
 
 // Insert a block right after the target `## <section>` heading, above any
@@ -1670,7 +2020,7 @@ async function cmdConsole(args) {
         await taskCancel(project, id);
         return sendJson(200, { ok: true, data: await freshScan() });
       } catch (err) {
-        const status = /not found|is not in/.test(err.message) ? 404 : /not migrated|no task store/.test(err.message) ? 409 : 400;
+        const status = /not found|is not in/.test(err.message) ? 404 : /not migrated|no task store|already archived|is archived/.test(err.message) ? 409 : 400;
         return sendJson(status, { ok: false, error: err.message });
       }
     }
@@ -1760,7 +2110,7 @@ async function main() {
   if (cmd === "task") {
     try { return await cmdTask(args); } catch (err) { console.error(err.message); process.exit(1); }
   }
-  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  opc task add|list|show|move|edit|done|cancel|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  opc task add|list|show|search|move|edit|done|cancel|restore|trim|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 

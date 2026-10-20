@@ -12,8 +12,13 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
    it.
    Leftover work becomes a new task: `opc task add <project> "<title>"` with
    `--spec`, `--prompt`, `--desc` as needed, then `opc task move <id> <section>`.
-   Never edit the store file, and never put task edits on a branch — the store
-   is control-plane data.
+   Canceled work is not deleted: `opc task cancel <id>` archives it, and
+   `opc task restore <id>` reopens it with the same ID. Done keeps only the 25
+   most recent completions; older ones spill to the archive automatically. Read
+   history with `opc task show <id>` or `opc task search <project> "<text>"` —
+   never load the archive file into context.
+   Never edit either store file, and never put task edits on a branch — the
+   store is control-plane data.
 2. **Where does new content go?** (the placement decision)
    - A rule that must never silently be violated → propose a change to the
      matching fragment in the hub (`standards/`), never a repo-local rule.

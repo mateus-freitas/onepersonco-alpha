@@ -19,10 +19,10 @@ version gets the `onepersonco` name — this checkout keeps `-alpha`.
 | `skeleton/` | template for new projects, extracted from blocos + gymbloc (pending) |
 
 Machine-local working data — scratch, worktrees, trash, and each project's task
-store (`backlog.md` + `backlog.meta.json`) — lives *outside* every repo in the
-hidden sibling `~/dev/.onepersonco/` (see its README). Nothing there is
-committed; scratch is safe to delete, worktrees are live checkouts, and the task
-store is written only by `opc task`.
+store (`backlog.md` + `backlog.meta.json` + `backlog.archive.jsonl`) — lives
+*outside* every repo in the hidden sibling `~/dev/.onepersonco/` (see its
+README). Nothing there is committed; scratch is safe to delete, worktrees are
+live checkouts, and the task store is written only by `opc task`.
 
 ## Getting started
 
@@ -109,7 +109,7 @@ that has not adopted the standards yet shows as "pending retrofit" in
 ## Daily use
 
 - `opc check [--dir <checkout>]` — deterministic health: drift, markers, tasks, links; audits the checkout you run it from (worktree included); the hub's main checkout still audits every project; `--dir` overrides
-- `opc task …` — the backlog: `add` · `edit` · `list` · `show` · `move` · `done` · `cancel` · `migrate` · `init`; the store lives at `~/.onepersonco/<project>/backlog.md` and is never committed (see `docs/guides/tasks.md`)
+- `opc task …` — the backlog: `add` · `edit` · `list` · `show` · `search` · `move` · `done` · `cancel` · `restore` · `trim` · `migrate` · `init`; the live store lives at `~/.onepersonco/<project>/backlog.md` with history in `backlog.archive.jsonl`, never committed (see `docs/guides/tasks.md`)
 - `opc console [--lan]` — the console; rescans on every load (board · worktrees · RFCs · docs · prompts · health); `--lan` also answers your home wifi so a phone can read and edit (same network only; opening paths stays Mac-only)
 - `opc sync [project…] [--dir <checkout>]` — push standards changes into standardized projects; targets the checkout you run it from (worktree included); the hub's main checkout still syncs all standardized projects; `--dir` overrides
 - `opc scan --snapshot` — refresh the self-contained `console/snapshot.html`
