@@ -32,9 +32,10 @@ maxId(archive) + 1)`. Migration assigns IDs in file order, so an ID means the
 same task forever. Titles may change; references never break.
 
 Done is a window, not a log: the live store keeps the newest 25 completions.
-Every completion (or a one-off `opc task trim`) moves the tail beyond 25 to the
-archive. `cancel` appends a canceled record and removes the live line rather
-than deleting it, so a mistaken cancel is recoverable with
+Every completion (or a one-off `opc task trim`) moves the oldest beyond 25 to
+the archive — by date, so migrated Done sections do not have to be ordered.
+`cancel` appends a canceled record and removes the live line rather than
+deleting it, so a mistaken cancel is recoverable with
 `opc task restore <id>`. The archive is JSONL — one task per line — because it
 is append-heavy, machine-read, and needs explicit fields; the live file stays
 markdown because people and agents read it. `show` and `search` span both;

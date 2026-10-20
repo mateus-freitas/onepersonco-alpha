@@ -462,10 +462,12 @@ function parseTaskLine(line) {
   if (specM) { spec = specM[1]; rest = rest.replace(specM[0], ""); }
   const promptM = rest.match(/\s+—\s+prompt:\s+(\S+)/);
   if (promptM) { prompt = promptM[1]; rest = rest.replace(promptM[0], ""); }
-  const priM = rest.match(/\s+—\s+(p[0-3]|P[0-3])\s*$/);
-  if (priM) { priority = priM[1].toLowerCase(); rest = rest.replace(priM[0], ""); }
+  // Done appends the date after all fields, so strip the date first, then the
+  // priority that may now be trailing.
   const dateM = rest.match(/\s+—\s+(\d{4}-\d{2}-\d{2})\s*$/);
   if (dateM) { date = dateM[1]; rest = rest.replace(dateM[0], ""); }
+  const priM = rest.match(/\s+—\s+(p[0-3]|P[0-3])\s*$/);
+  if (priM) { priority = priM[1].toLowerCase(); rest = rest.replace(priM[0], ""); }
   return {
     id,
     title: rest.trim(),
@@ -1142,12 +1144,22 @@ function updateArchiveEntry(p, id, patch) {
 // and rewrites the live file after, so a crash can duplicate a record (check
 // catches it) but can never lose the task.
 function spillDone(p, lines) {
-  const overflow = listTasks(lines).filter((t) => t.section === "Done").slice(DONE_KEEP);
-  if (!overflow.length) return 0;
+  const done = listTasks(lines).filter((t) => t.section === "Done");
+  if (done.length <= DONE_KEEP) return 0;
+  const dated = done.map((t) => ({ t, task: taskFromBlock(lines, t) }));
+  // Keep the newest completions by date, not by layout: migrated Done sections
+  // are not guaranteed to be newest-first. Missing dates count as oldest; a
+  // same-date tie archives the lower block first (it is older by position).
+  dated.sort((a, b) => {
+    const da = a.task?.date || "";
+    const db = b.task?.date || "";
+    return da !== db ? da.localeCompare(db) : b.t.start - a.t.start;
+  });
+  const cut = dated.slice(0, done.length - DONE_KEEP);
+  if (!cut.length) return 0;
   const archivedIds = new Set(readArchive(p).records.map((r) => r.data.id));
   const entries = [];
-  for (const t of overflow) {
-    const task = taskFromBlock(lines, t);
+  for (const { task } of cut) {
     if (!task) continue;
     // An earlier spill may have appended the record and crashed before the
     // live rewrite; removing the live copy is enough to finish that attempt.
@@ -1155,9 +1167,9 @@ function spillDone(p, lines) {
       entries.push(archiveEntryFromTask(task, "done", task.date || todayISO()));
   }
   if (entries.length) appendArchive(p, entries);
-  for (const t of [...overflow].sort((a, b) => b.start - a.start))
+  for (const { t } of [...cut].sort((a, b) => b.t.start - a.t.start))
     lines.splice(t.start, t.end - t.start + 1);
-  return overflow.length;
+  return cut.length;
 }
 
 async function trimDone(p) {
@@ -1207,7 +1219,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function withTaskLock(p, fn) {
   fs.mkdirSync(storeDir(p.id), { recursive: true });
   const lock = path.join(storeDir(p.id), "backlog.lock");
-  for (let tries = 0; tries < 120; tries++) {
+  // 300 × 40ms ≈ 12s, so a waiter outlives the 10s stale threshold.
+  for (let tries = 0; tries < 300; tries++) {
     try {
       const fd = fs.openSync(lock, "wx");
       fs.writeSync(fd, `${process.pid} ${Date.now()}`);
@@ -1393,11 +1406,12 @@ async function taskMove(p, id, to, before) {
     let line = from.line;
     if (to === "Done" && from.section !== "Done") line = toDone(line);
     else if (to !== "Done" && from.section === "Done") line = fromDone(line);
+    const descLines = lines.slice(from.start + 1, from.end + 1);
     lines.splice(from.start, from.end - from.start + 1);
     if (lines[from.start - 1] !== undefined && lines[from.start - 1].trim() === "" &&
         lines[from.start] !== undefined && lines[from.start].trim() === "")
       lines.splice(from.start, 1);
-    const at = insertItem(lines, to, k, [line]);
+    const at = insertItem(lines, to, k, [line, ...descLines]);
     if (at === false) throw new Error(`backlog has no "## ${to}" section`);
     if (to === "Done") spillDone(p, lines);
     writeLines(file, lines, endsNL);
@@ -1651,14 +1665,19 @@ async function taskMigrate(projectId, keyArg, dryRun) {
     return `${m[1]}${key}-${n} · ${m[3]}`;
   });
   if (dryRun) return { project: p.id, key, count: n, file: displayFile(storeFile(p)), dryRun: true };
-  fs.mkdirSync(storeDir(p.id), { recursive: true });
-  writeLines(storeFile(p), migrated, endsNL);
-  writeMeta(p, { key, next: n + 1 });
+  await withTaskLock(p, () => {
+    if (fs.existsSync(storeFile(p)))
+      throw new Error(`${p.id}: task store already exists — ${displayFile(storeFile(p))}`);
+    if (fs.existsSync(archiveFile(p)))
+      throw new Error(`${p.id}: an archive exists without a live store — inspect ${displayFile(archiveFile(p))}`);
+    writeLines(storeFile(p), migrated, endsNL);
+    writeMeta(p, { key, next: n + 1 });
+    if (p.key !== key) {
+      p.key = key;
+      fs.writeFileSync(path.join(HUB, "projects.json"), JSON.stringify(registry, null, 2) + "\n");
+    }
+  });
   await trimDone(p);
-  if (p.key !== key) {
-    p.key = key;
-    fs.writeFileSync(path.join(HUB, "projects.json"), JSON.stringify(registry, null, 2) + "\n");
-  }
   return { project: p.id, key, count: n, file: displayFile(storeFile(p)) };
 }
 
@@ -1824,7 +1843,7 @@ async function cmdTask(args) {
   if (sub === "trim") {
     const p = projectOf(pos[0] || "");
     const n = await trimDone(p);
-    console.log(n ? `archived ${n} old done task(s)` : "nothing to trim");
+    console.log(n ? `trimmed ${n} old done task(s)` : "nothing to trim");
     return;
   }
   if (sub === "migrate") {
