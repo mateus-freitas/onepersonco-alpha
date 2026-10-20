@@ -86,7 +86,8 @@
   #task-wrap.on #task-backdrop,#task-wrap.on #task-panel{opacity:1}
   #task-wrap.on #task-panel{transform:none}
   .td-head{display:flex;align-items:center;gap:8px}
-  .td-head .btn{margin-left:auto}
+  .td-head > .btn{margin-left:auto}
+  .td-head .td-actions{margin-left:auto;display:flex;align-items:center;gap:6px}
   .td-crumb{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-foreground);display:flex;align-items:center;gap:6px}
   .td-title{font-size:15px;font-weight:600;line-height:1.4}
   .td-title.done{text-decoration:line-through;opacity:.6}
@@ -642,9 +643,10 @@ function drawerHTML(t) {
   const ref = t.id
     ? '<span class="lref" title="' + esc(fileRef + " line " + t.line) + '">' + esc(t.id) + "</span>"
     : '<span class="lref" title="' + esc(fileRef + " line " + t.line) + '">L' + esc(t.line) + "</span>";
-  return '<div class="td-head"><div class="td-crumb"><span class="dot ' + pclass(t.project) + '"></span>' + esc(t.project) + " · " + esc(t.section.toLowerCase()) + '</div>' +
+  return '<div class="td-head"><div class="td-crumb"><span class="dot ' + pclass(t.project) + '"></span>' + esc(t.project) + " · " + esc(t.section.toLowerCase()) + "</div>" +
+    '<div class="td-actions">' +
     (LIVE && t.store ? '<button class="btn danger" id="task-cancel" title="Remove ' + esc(t.id) + ' from the task store — IDs are never reused">cancel</button>' : "") +
-    '<button class="btn" id="task-close" title="Close (Esc)">✕</button></div>' +
+    '<button class="btn" id="task-close" title="Close (Esc)">✕</button></div></div>' +
     '<div class="td-title' + (t.checked ? " done" : "") + '">' + ref + esc(t.title) + "</div>" +
     (t.desc ? '<div class="td-desc">' + esc(t.desc) + "</div>" : "") +
     '<div class="td-tags">' + tags + "</div>" +
