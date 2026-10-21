@@ -53,8 +53,9 @@ answers `already done (archived)`). Leftover work becomes a new task with
 ## Console
 
 The board uses the same writer: drag a card to move it, create from the dialog,
-cancel from the drawer (the task goes to the archive; the CLI can restore it).
-Projects without a store are read-only with a hint.
+cancel from the drawer, or use the Done header's `clear` to archive every
+visible done task (scoped to the active project filter; the CLI can restore
+individual IDs). Projects without a store are read-only with a hint.
 
 ## Legacy
 

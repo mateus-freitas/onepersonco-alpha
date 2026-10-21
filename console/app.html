@@ -137,8 +137,11 @@
   .btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
   .btn.primary:hover{background:var(--primary);color:var(--primary-foreground);opacity:.88}
   .btn[disabled]{opacity:.45;cursor:default;pointer-events:none}
-  .col .hd .add{margin-left:auto;background:none;border:none;color:var(--muted-foreground);cursor:pointer;font:inherit;font-size:13px;line-height:1;padding:0 1px}
+  .col .hd .hd-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .col .hd .add{background:none;border:none;color:var(--muted-foreground);cursor:pointer;font:inherit;font-size:13px;line-height:1;padding:0 1px}
   .col .hd .add:hover{color:var(--foreground)}
+  .col .hd .clear{background:none;border:none;color:var(--muted-foreground);cursor:pointer;font:inherit;font-size:9.5px;line-height:1;padding:0;letter-spacing:.08em}
+  .col .hd .clear:hover{color:var(--foreground)}
 </style>
 </head>
 <body>
@@ -321,8 +324,13 @@ function renderBoard() {
         (i.desc ? '<div class="d">' + esc(i.desc) + "</div>" : "") +
         '<div class="meta">' + meta + "</div></div>";
     }).join("") : '<div class="empty">—</div>';
+    const storeDone = items.filter((i) => i.store).length;
+    const clearBtn = LIVE && s === "Done" && storeDone > 0
+      ? '<button class="clear" id="task-clear-done" title="Archive all ' + storeDone + ' done task(s) — recoverable with opc task restore">clear</button>'
+      : "";
     const addBtn = canAdd ? '<button class="add" data-add-section="' + s + '" title="new task in ' + s + '">+</button>' : "";
-    return '<div class="col" data-section="' + s + '"><div class="hd">' + s + " <em>" + items.length + "</em>" + addBtn + "</div>" + cards + "</div>";
+    const actions = clearBtn || addBtn ? '<span class="hd-actions">' + clearBtn + addBtn + "</span>" : "";
+    return '<div class="col" data-section="' + s + '"><div class="hd">' + s + " <em>" + items.length + "</em>" + actions + "</div>" + cards + "</div>";
   }).join("");
   return healthBanner + banner + '<div class="cols">' + cols + "</div>";
 }
@@ -722,6 +730,33 @@ async function cancelTask() {
   }
 }
 
+// Clear the visible Done column into each project's archive. Scoped to the
+// active project filter so a filtered board cannot surprise another project.
+async function clearDone() {
+  if (!LIVE || writing) return;
+  const projects = filtered()
+    .map((p) => ({ p, n: (backlogOf(p).Done || []).filter((i) => i.id && p.taskStore).length }))
+    .filter((x) => x.n > 0);
+  if (!projects.length) return;
+  const total = projects.reduce((n, x) => n + x.n, 0);
+  const scope = projects.map((x) => x.p.id + " (" + x.n + ")").join(", ");
+  if (!confirm("Archive all " + total + " done task(s) from " + scope + "?\n\nThey move to backlog.archive.jsonl. Restore any with `opc task restore <id>`; IDs are never reused.")) return;
+  writing = true;
+  let archived = 0;
+  try {
+    for (const { p } of projects) {
+      const out = await postJSON("/task/trim", { project: p.id, keep: 0 });
+      if (out.data) applyData(out.data);
+      archived += Number(out.trimmed) || 0;
+    }
+    toast("archived " + archived + " done");
+  } catch (err) {
+    toast("archive failed — " + err.message);
+  } finally {
+    writing = false;
+  }
+}
+
 // ---------------------------------------------------------------- drag & drop
 
 // Cards are draggable in live mode only, and only store tasks (legacy lines
@@ -944,6 +979,7 @@ document.addEventListener("click", (e) => {
   }
   if (e.target.id === "task-backdrop" || e.target.id === "task-close") { closeTask(); return; }
   if (e.target.id === "task-cancel") { cancelTask(); return; }
+  if (e.target.id === "task-clear-done") { clearDone(); return; }
   if (e.target.id === "task-new") { openNew(); return; }
   if (e.target.id === "new-backdrop" || e.target.id === "new-close" || e.target.id === "new-cancel") { closeNew(); return; }
   const mdBtn = e.target.closest("[data-md-raw], [data-md-copy]");

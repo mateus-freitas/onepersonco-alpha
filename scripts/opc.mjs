@@ -1989,7 +1989,8 @@ async function cmdConsole(args) {
     }
 
     // ---- task writes: add, move/reposition, cancel (stable IDs, not lines)
-    if (req.method === "POST" && (url.pathname === "/task/add" || url.pathname === "/task/move" || url.pathname === "/task/cancel")) {
+    if (req.method === "POST" && (url.pathname === "/task/add" || url.pathname === "/task/move" ||
+        url.pathname === "/task/cancel" || url.pathname === "/task/trim")) {
       const origin = req.headers.origin;
       const originHost = origin && origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
       const sameHost = originHost && originHost === String(req.headers.host || "");
@@ -2021,6 +2022,20 @@ async function cmdConsole(args) {
           return sendJson(200, { ok: true, id: out.id, at: { section: out.section, index: out.index }, data: await freshScan() });
         } catch (err) {
           const status = /duplicate:|not migrated|no task store/.test(err.message) ? 409 : 400;
+          return sendJson(status, { ok: false, error: err.message });
+        }
+      }
+
+      if (kind === "trim") {
+        if (!body || typeof body.project !== "string" ||
+            !Number.isInteger(body.keep) || body.keep < 0) return shapeError();
+        const project = registry.projects.find((p) => p.id === body.project);
+        if (!project) return sendJson(404, { ok: false, error: `unknown project: ${body.project}` });
+        try {
+          const trimmed = await trimDone(project, body.keep);
+          return sendJson(200, { ok: true, trimmed, data: await freshScan() });
+        } catch (err) {
+          const status = /not migrated|no task store/.test(err.message) ? 409 : 400;
           return sendJson(status, { ok: false, error: err.message });
         }
       }
