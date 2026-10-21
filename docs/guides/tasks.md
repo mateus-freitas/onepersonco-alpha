@@ -50,12 +50,26 @@ It stamps the date and is idempotent (`GYM-142 already done`; an archived task
 answers `already done (archived)`). Leftover work becomes a new task with
 `opc task add` — not a note or a follow-up branch.
 
+Then clean the session:
+
+```sh
+opc task clean GYM-142          # dry run: prompt folder + matched worktrees
+opc task clean GYM-142 --yes    # delete the prompt; remove clean merged worktrees
+```
+
+`--prompt archive` keeps the brief under `prompts/archive/`; `--prompt keep`
+leaves it in place; `--no-worktrees` skips trees. Dirty or unmerged worktrees
+are kept, and the prompt stays linked until they are resolved. The console’s
+Done dialog and `remove files` button use the same operation.
+
 ## Console
 
 The board uses the same writer: drag a card to move it, create from the dialog,
 cancel from the drawer, or use the Done header's `clear` to archive every
 visible done task (scoped to the active project filter; the CLI can restore
-individual IDs). Projects without a store are read-only with a hint.
+individual IDs). Moving a task to Done offers to clean its prompt/worktrees;
+the Done drawer's `remove files` button does the same later. Projects without a
+store are read-only with a hint.
 
 ## Legacy
 

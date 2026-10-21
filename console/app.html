@@ -115,6 +115,7 @@
   .md-raw{width:100%;background:var(--secondary);border:0;color:var(--foreground);padding:8px 10px;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;resize:vertical;min-height:84px}
   .md-raw[hidden]{display:none}
   .td-foot{margin-top:auto;border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--muted-foreground);display:flex;gap:10px;flex-wrap:wrap}
+  .td-foot .btn{margin-left:auto}
   /* new task dialog — the drawer's flat language, centered */
   #new-wrap{position:fixed;inset:0;z-index:50;display:flex;justify-content:center;align-items:flex-start;padding:11vh 16px 16px}
   #new-wrap[hidden]{display:none}
@@ -660,7 +661,10 @@ function drawerHTML(t) {
     '<div class="td-tags">' + tags + "</div>" +
     promptSec +
     '<section class="td-sec"><div class="hd">Worktrees <span class="sub">' + wts.length + "</span></div>" + wtRows + "</section>" +
-    '<div class="td-foot">' + line + legacyHint + "</div>";
+    '<div class="td-foot">' + line + legacyHint +
+    (LIVE && t.store && t.checked && (t.promptInfo || wts.length)
+      ? '<button class="btn mini" id="task-clean" title="Remove the prompt folder and clean merged worktrees">remove files</button>'
+      : "") + "</div>";
 }
 
 function openTask(key) {
@@ -706,6 +710,11 @@ async function moveTask(key, to, anchorKey) {
     if (out.data) applyData(out.data);
     if (reopen) openTask(t.id);
     if (!out.noop) toast(t.section === to ? "reordered" : "moved to " + to.toLowerCase());
+    if (!out.noop && to === "Done" && t.section !== "Done") {
+      const nt = taskByKey(t.id);
+      if (nt && nt.checked && (nt.promptInfo || (nt.worktrees || []).some(safeWorktree)))
+        setTimeout(() => cleanTask(t.id), 220);
+    }
   } catch (err) {
     toast("move failed — " + err.message);
   } finally {
@@ -725,6 +734,49 @@ async function cancelTask() {
     toast("canceled " + t.id + " — archived");
   } catch (err) {
     toast("cancel failed — " + err.message);
+  } finally {
+    writing = false;
+  }
+}
+
+function safeWorktree(w) {
+  return w.dirty === 0 && !w.detached && (w.pr?.state === "MERGED" || w.ahead === 0);
+}
+
+// Remove the prompt folder and safe worktrees for a Done task. The same
+// operation is available as `opc task clean <id>`.
+async function cleanTask(id) {
+  if (!LIVE || writing) return;
+  const t = taskByKey(id);
+  if (!t || !t.store || !t.checked) return;
+  const wts = t.worktrees || [];
+  const safe = wts.filter(safeWorktree);
+  const unsafe = wts.length - safe.length;
+  if (!t.promptInfo && !safe.length) {
+    toast(unsafe ? "no safe files to remove" : "nothing to remove");
+    return;
+  }
+  const bits = [];
+  if (t.promptInfo && !unsafe) bits.push("the prompt folder (" + t.promptInfo.rel + ")");
+  if (safe.length) bits.push(safe.length + " clean merged worktree" + (safe.length === 1 ? "" : "s"));
+  if (!bits.length) {
+    toast(unsafe ? "no safe files to remove — resolve the worktree(s) first" : "nothing to remove");
+    return;
+  }
+  const extra = unsafe ? "\n" + unsafe + " dirty or unmerged worktree(s) will be kept; the prompt folder stays linked until they are resolved." : "";
+  if (!confirm("Remove " + bits.join(" and ") + " for " + t.id + "?\n\nThe PR/evidence is the record; prompt deletion cannot be undone." + extra)) return;
+  const reopen = state.openKey === t.id;
+  writing = true;
+  try {
+    const out = await postJSON("/task/clean", { id: t.id, prompt: "delete", worktrees: true });
+    if (out.data) applyData(out.data);
+    if (reopen) openTask(t.id);
+    const n = (out.cleaned || []).length;
+    const kept = out.prompt && String(out.prompt.action).startsWith("keep");
+    toast(n ? "cleaned " + n + " file(s)" + (kept ? " (prompt kept)" : "") : "nothing cleaned for " + t.id);
+    if (out.errors && out.errors.length) toast("clean issue — " + out.errors[0].error);
+  } catch (err) {
+    toast("clean failed — " + err.message);
   } finally {
     writing = false;
   }
@@ -979,6 +1031,7 @@ document.addEventListener("click", (e) => {
   }
   if (e.target.id === "task-backdrop" || e.target.id === "task-close") { closeTask(); return; }
   if (e.target.id === "task-cancel") { cancelTask(); return; }
+  if (e.target.id === "task-clean") { cleanTask(state.openKey); return; }
   if (e.target.id === "task-clear-done") { clearDone(); return; }
   if (e.target.id === "task-new") { openNew(); return; }
   if (e.target.id === "new-backdrop" || e.target.id === "new-close" || e.target.id === "new-cancel") { closeNew(); return; }

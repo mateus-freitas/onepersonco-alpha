@@ -1,6 +1,6 @@
 ---
 name: opc-task-loop
-description: "Use when finishing work in an OPC (One Person Company) project. Covers closing a task, filing leftovers, deciding where documents go, and graduating durable knowledge. Triggers include task done, wrap up, write it up, where should this doc go, close the task."
+description: "Use when finishing work in an OPC (One Person Company) project. Covers closing a task, cleaning its prompt and worktrees after the PR merges, filing leftovers, deciding where documents go, and graduating durable knowledge. Triggers include task done, PR merged, clean up files, wrap up, write it up, where should this doc go, close the task."
 ---
 
 # Closing out a task in OPC projects
@@ -39,12 +39,17 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
    selected/skipped in the PR body.
 5. **Record.** The merged PR is the implementation record; the task's state is
    already in the store. An evidence folder only when the project tracks one.
-6. **Archive the session.** Move the task's scratch folder
-   (`prompts/<date>-<slug>/`) to `prompts/archive/` once its outcome is
-   captured — the task's `prompt:` link still resolves there; anything still
-   open is a task, not a note.
-7. **Verify before claiming done.** `opc check` for structure and drift, plus
-   the project's own gates for code. Never claim green from memory.
+6. **Clean the session.** After the PR merges, run `opc task clean <id>`
+   (dry run), then `opc task clean <id> --yes`. It deletes the prompt folder —
+   use `--prompt archive` to keep it under `prompts/archive/` — and removes
+   clean, merged worktrees. Dirty or unmerged worktrees are kept, and the
+   prompt stays linked until they are resolved. The PR/evidence is the record;
+   never clean an open task. The console's Done dialog and `remove files`
+   button use the same operation.
+7. **Verify before claiming done.** `opc task list <project> --json`: every
+   related objective is Done, not just the one in hand. Then `opc check` for
+   structure and drift, plus the project's own gates for code. Never claim
+   green from memory.
 
 This skill points; it does not restate. The rules themselves live in the
 project's `AGENTS.md` — its synced blocks and its local sections.

@@ -7,7 +7,8 @@
 // console serve the local console; /data.json rescans on every load, and
 //         /task/add + /task/move + /task/cancel edit the task store behind locks
 // task   control-plane task store: add, list, show, search, move, edit, done,
-//        cancel, restore, trim, migrate, init; history lives in a JSONL archive
+//        cancel, restore, clean, trim, migrate, init; history lives in a JSONL
+//        archive, and clean removes a done task's prompt worktrees safely
 
 
 import fs from "node:fs";
@@ -1477,13 +1478,15 @@ async function taskEdit(p, id, fields) {
     const priority = fields.priority !== undefined ? (String(fields.priority).toLowerCase() || null) : cur.priority;
     if (priority && !/^p[0-3]$/.test(priority)) throw new Error("priority must be p0..p3");
     const spec = fields.spec !== undefined ? (String(fields.spec) || null) : cur.spec;
-    if (spec) {
+    // Validate only fields being changed: clearing a prompt must not fail
+    // because an unrelated old spec no longer resolves.
+    if (fields.spec !== undefined && spec) {
       if (/\s/.test(spec)) throw new Error("spec must be a path without spaces");
       const target = spec.startsWith("~/") ? expand(spec) : path.resolve(expand(p.path), spec);
       if (!fs.existsSync(target)) throw new Error(`spec does not resolve: ${spec}`);
     }
     const prompt = fields.prompt !== undefined ? (String(fields.prompt) || null) : cur.prompt;
-    if (prompt) {
+    if (fields.prompt !== undefined && prompt) {
       if (/\s/.test(prompt)) throw new Error("prompt must be a folder without spaces");
       if (!resolvePrompt(p.id, prompt)) throw new Error(`prompt does not resolve: ${prompt}`);
     }
@@ -1643,6 +1646,133 @@ function taskSearch(p, query) {
   );
 }
 
+// A worktree is safe to remove only when it is clean and its branch is merged
+// (a merged PR, or no commits ahead of main). Dirty/unmerged/detached trees are
+// reported and kept; the branch itself is never deleted.
+function taskWorktreePlan(item, worktrees) {
+  const matched = matchWorktrees(item, worktrees);
+  const safe = [];
+  const skipped = [];
+  for (const w of matched) {
+    let reason = null;
+    if (w.stale) reason = "stale";
+    else if (w.dirty == null) reason = "missing";
+    else if (w.dirty > 0) reason = `${w.dirty} uncommitted change(s)`;
+    else if (w.detached) reason = "detached head";
+    else if (!(w.pr?.state === "MERGED" || w.ahead === 0))
+      reason = w.pr ? `PR ${w.pr.state}` : "unmerged";
+    if (reason) skipped.push({ ...w, reason });
+    else safe.push(w);
+  }
+  return { matched, safe, skipped };
+}
+
+// Remove the files a completed task no longer needs. The store is the record:
+// the prompt folder is deletable (or archived), and only clean merged worktrees
+// are removed. Shared prompt folders are never touched.
+async function taskClean(p, id, opts = {}) {
+  const source = backlogSource(p);
+  if (!source) throw new Error(`no task store for ${p.id}`);
+  if (source.legacy) throw new Error(`${p.id} is not migrated — run opc task migrate`);
+  const backlog = parseBacklog(source.file);
+  const found = findTask(backlog, id);
+  if (!found) {
+    const archived = readArchive(p).records.find((r) => r.data.id === id);
+    if (archived) throw new Error(`${id} is archived — run \`opc task restore ${id}\` before cleaning`);
+    throw new Error(`task not found: ${id}`);
+  }
+  if (found.section !== "Done" || !found.task.checked)
+    throw new Error(`${id} is not done — move it to Done before cleaning`);
+  const item = found.task;
+  const promptInfo = item.prompt ? resolvePrompt(p.id, item.prompt) : null;
+  const all = SECTIONS.flatMap((s) => backlog[s]);
+  let sharedPrompt = false;
+  if (promptInfo) {
+    const target = real(promptInfo.path);
+    for (const t of all) {
+      if (t.id === id || !t.prompt) continue;
+      const other = resolvePrompt(p.id, t.prompt);
+      if (other && real(other.path) === target) { sharedPrompt = true; break; }
+    }
+  }
+  const { byId } = await collectWorktrees();
+  const plan = taskWorktreePlan({ ...item, promptInfo }, byId.get(p.id) || []);
+  const promptAction = opts.prompt || "delete";
+  if (!["delete", "archive", "keep"].includes(promptAction))
+    throw new Error("prompt action must be delete, archive or keep");
+  const worktrees = opts.worktrees !== false;
+  const apply = Boolean(opts.apply);
+  // The prompt folder anchors the worktree match. If any worktree still needs
+  // attention, keep that link until it is resolved.
+  const promptBlocked = plan.skipped.length > 0;
+  const result = {
+    id,
+    title: item.title,
+    prompt: promptInfo
+      ? { rel: promptInfo.rel, archived: promptInfo.archived,
+          action: sharedPrompt ? "keep (shared)" : promptBlocked ? "keep (unsafe worktrees)" : promptAction }
+      : null,
+    worktrees: plan.matched.map((w) => ({
+      branch: w.branch,
+      path: w.path,
+      dirty: w.dirty,
+      ahead: w.ahead,
+      pr: w.pr ? { state: w.pr.state, number: w.pr.number } : null,
+      action: plan.safe.includes(w) ? "remove" : "keep",
+      reason: plan.skipped.find((s) => s.path === w.path)?.reason || null,
+    })),
+    safe: plan.safe.length,
+    skipped: plan.skipped,
+    sharedPrompt,
+    cleaned: [],
+    errors: [],
+    applied: apply,
+  };
+  if (!apply) return result;
+
+  if (promptInfo && promptAction !== "keep" && !sharedPrompt && !promptBlocked) {
+    const scratch = expand(registry.scratchRoot);
+    const scratchReal = real(scratch);
+    const promptReal = real(promptInfo.path);
+    try {
+      if (!promptReal.startsWith(scratchReal + path.sep))
+        throw new Error(`prompt is outside ${displayFile(scratch)}`);
+      if (promptAction === "delete") {
+        fs.rmSync(promptInfo.path, { recursive: true, force: false });
+        await taskEdit(p, id, { prompt: "" });
+        result.cleaned.push({ type: "prompt", action: "deleted", rel: promptInfo.rel });
+      } else if (promptInfo.archived) {
+        result.cleaned.push({ type: "prompt", action: "already archived", rel: promptInfo.rel });
+      } else {
+        const dest = path.join(scratch, p.id, "prompts", "archive", path.basename(promptInfo.path));
+        if (fs.existsSync(dest)) throw new Error(`archive destination exists: ${displayFile(dest)}`);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.renameSync(promptInfo.path, dest);
+        result.cleaned.push({ type: "prompt", action: "archived", rel: path.relative(scratch, dest) });
+      }
+    } catch (err) {
+      result.errors.push({ type: "prompt", error: err.message });
+    }
+  }
+
+  if (worktrees && !sharedPrompt) {
+    const main = expand(p.path);
+    for (const w of plan.safe) {
+      const out = spawnSync("git", ["-C", main, "worktree", "remove", w.path], { encoding: "utf8" });
+      if (out.status === 0)
+        result.cleaned.push({ type: "worktree", branch: w.branch, path: w.path });
+      else
+        result.errors.push({
+          type: "worktree",
+          branch: w.branch,
+          path: w.path,
+          error: (out.stderr || out.stdout || `git exited ${out.status}`).trim(),
+        });
+    }
+  }
+  return result;
+}
+
 async function taskMigrate(projectId, keyArg, dryRun) {
   if (!projectId) throw new Error("usage: opc task migrate <project> --key <KEY> [--dry-run]");
   const p = registry.projects.find((x) => x.id === projectId);
@@ -1708,22 +1838,29 @@ async function taskInit(p, keyArg) {
   });
 }
 
+const TASK_BOOLEAN_FLAGS = new Set([
+  "json", "dry-run", "top", "end", "all", "archived", "yes", "no-worktrees",
+]);
+const TASK_VALUE_FLAGS = new Set([
+  "section", "priority", "spec", "prompt", "desc", "before", "pr", "title", "key", "keep",
+]);
+
 function parseTaskArgs(argv) {
   const pos = [];
   const flags = { desc: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--json" || arg === "--dry-run" || arg === "--top" || arg === "--end" ||
-        arg === "--all" || arg === "--archived") {
-      flags[arg.slice(2)] = true;
-    } else if (arg.startsWith("--")) {
-      const name = arg.slice(2);
+    if (!arg.startsWith("--")) { pos.push(arg); continue; }
+    const name = arg.slice(2);
+    if (TASK_BOOLEAN_FLAGS.has(name)) {
+      flags[name] = true;
+    } else if (TASK_VALUE_FLAGS.has(name)) {
       const value = argv[++i];
       if (value === undefined) throw new Error(`missing value for --${name}`);
       if (name === "desc") flags.desc.push(value);
       else flags[name] = value;
     } else {
-      pos.push(arg);
+      throw new Error(`unknown flag: --${name}`);
     }
   }
   return { pos, flags };
@@ -1826,6 +1963,28 @@ async function cmdTask(args) {
     console.log(`${id} restored to ${out.section}${out.repaired ? " (repaired)" : ""}`);
     return;
   }
+  if (sub === "clean") {
+    const id = pos[0];
+    const p = findProjectById(id || "");
+    if (!p) throw new Error(`task not found: ${id || "(missing)"}`);
+    const out = await taskClean(p, id, {
+      prompt: flags.prompt || "delete",
+      worktrees: !flags["no-worktrees"],
+      apply: Boolean(flags.yes),
+    });
+    if (flags.json) return console.log(JSON.stringify(out, null, 2));
+    console.log(`${out.id} · ${out.title} (Done)`);
+    console.log(out.prompt ? `  prompt: ${out.prompt.rel} (${out.prompt.action})` : "  prompt: none");
+    if (!out.worktrees.length) console.log("  worktrees: none matched");
+    for (const w of out.worktrees)
+      console.log(`  worktree: ${w.branch} (${w.action}${w.reason ? " — " + w.reason : ""})`);
+    for (const c of out.cleaned) console.log(`  cleaned ${c.type}: ${c.rel || c.branch}`);
+    for (const e of out.errors) console.log(`  error ${e.type}: ${e.error}`);
+    if (out.applied && !out.cleaned.length && !out.errors.length) console.log("  nothing removed");
+    if (!out.applied && (out.safe > 0 || (out.prompt && !String(out.prompt.action).startsWith("keep"))))
+      console.log("  dry run — add --yes to apply");
+    return;
+  }
   if (sub === "search") {
     const [projectId, ...words] = pos;
     if (!projectId || !words.length)
@@ -1861,7 +2020,7 @@ async function cmdTask(args) {
     console.log(`initialized ${out.project} · ${out.key} → ${out.file}`);
     return;
   }
-  throw new Error("usage: opc task add|list|show|search|move|edit|done|cancel|restore|trim|migrate|init");
+  throw new Error("usage: opc task add|list|show|search|move|edit|done|cancel|restore|clean|trim|migrate|init");
 }
 
 // Insert a block right after the target `## <section>` heading, above any
@@ -1990,7 +2149,8 @@ async function cmdConsole(args) {
 
     // ---- task writes: add, move/reposition, cancel (stable IDs, not lines)
     if (req.method === "POST" && (url.pathname === "/task/add" || url.pathname === "/task/move" ||
-        url.pathname === "/task/cancel" || url.pathname === "/task/trim")) {
+        url.pathname === "/task/cancel" || url.pathname === "/task/trim" ||
+        url.pathname === "/task/clean")) {
       const origin = req.headers.origin;
       const originHost = origin && origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
       const sameHost = originHost && originHost === String(req.headers.host || "");
@@ -2036,6 +2196,34 @@ async function cmdConsole(args) {
           return sendJson(200, { ok: true, trimmed, data: await freshScan() });
         } catch (err) {
           const status = /not migrated|no task store/.test(err.message) ? 409 : 400;
+          return sendJson(status, { ok: false, error: err.message });
+        }
+      }
+
+      if (kind === "clean") {
+        if (!body || typeof body.id !== "string" ||
+            (body.prompt != null && !["delete", "archive", "keep"].includes(body.prompt)) ||
+            (body.worktrees != null && typeof body.worktrees !== "boolean")) return shapeError();
+        const project = findProjectById(body.id);
+        if (!project) return sendJson(404, { ok: false, error: `task not found: ${body.id}` });
+        try {
+          const out = await taskClean(project, body.id, {
+            prompt: body.prompt || "delete",
+            worktrees: body.worktrees !== false,
+            apply: true,
+          });
+          return sendJson(200, {
+            ok: true,
+            cleaned: out.cleaned,
+            errors: out.errors,
+            skipped: out.skipped,
+            prompt: out.prompt,
+            worktrees: out.worktrees,
+            data: await freshScan(),
+          });
+        } catch (err) {
+          const status = /not found/.test(err.message) ? 404
+            : /not done|archived|not migrated|no task store/.test(err.message) ? 409 : 400;
           return sendJson(status, { ok: false, error: err.message });
         }
       }
@@ -2146,7 +2334,7 @@ async function main() {
   if (cmd === "task") {
     try { return await cmdTask(args); } catch (err) { console.error(err.message); process.exit(1); }
   }
-  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  opc task add|list|show|search|move|edit|done|cancel|restore|trim|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  opc task add|list|show|search|move|edit|done|cancel|restore|clean|trim|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 

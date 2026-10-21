@@ -57,6 +57,19 @@ finishes the removal without appending again. Restore does the reverse — write
 live first, then removes the archive line — with the same recoverable duplicate
 state.
 
+## Cleanup
+
+`opc task clean <id>` is a dry run; `--yes` applies it. It only runs on a live
+Done task. The prompt folder is deleted by default (`--prompt archive` moves it
+under `prompts/archive/`, where the existing link still resolves; `--prompt
+keep` leaves it), and deleting it clears the task's `prompt:` field. Worktrees
+are matched by the prompt slug; only clean trees whose PR is merged (or whose
+branch is not ahead of main) are removed with `git worktree remove`. Dirty,
+detached, unmerged, stale or missing trees are reported and kept, and the
+prompt stays linked while any tree needs attention. Shared prompt folders are
+never touched. The console uses the same endpoint; its Done dialog and drawer
+button are just UI over this operation.
+
 ## Migration
 
 Legacy projects read `<repo>/docs/backlog.md` read-only and show a migration
