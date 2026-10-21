@@ -37,7 +37,8 @@ replaces them later, never the ID); `--before`, `--top`, `--end` place the move.
 
 Done keeps the 25 most recent completions in `backlog.md`; older ones move to the
 archive automatically on the next completion. `opc task trim gymbloc` enforces
-the window on demand (normally unnecessary).
+the window on demand (normally unnecessary); `--keep N` archives the oldest
+beyond N (`--keep 20` keeps twenty, `--keep 0` archives all Done tasks).
 
 ## After a merge
 

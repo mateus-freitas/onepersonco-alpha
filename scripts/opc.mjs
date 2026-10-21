@@ -1143,9 +1143,9 @@ function updateArchiveEntry(p, id, patch) {
 // Move the oldest completions beyond DONE_KEEP into the archive. Appends first
 // and rewrites the live file after, so a crash can duplicate a record (check
 // catches it) but can never lose the task.
-function spillDone(p, lines) {
+function spillDone(p, lines, keep = DONE_KEEP) {
   const done = listTasks(lines).filter((t) => t.section === "Done");
-  if (done.length <= DONE_KEEP) return 0;
+  if (done.length <= keep) return 0;
   const dated = done.map((t) => ({ t, task: taskFromBlock(lines, t) }));
   // Keep the newest completions by date, not by layout: migrated Done sections
   // are not guaranteed to be newest-first. Missing dates count as oldest; a
@@ -1155,7 +1155,7 @@ function spillDone(p, lines) {
     const db = b.task?.date || "";
     return da !== db ? da.localeCompare(db) : b.t.start - a.t.start;
   });
-  const cut = dated.slice(0, done.length - DONE_KEEP);
+  const cut = dated.slice(0, done.length - keep);
   if (!cut.length) return 0;
   const archivedIds = new Set(readArchive(p).records.map((r) => r.data.id));
   const entries = [];
@@ -1172,11 +1172,11 @@ function spillDone(p, lines) {
   return cut.length;
 }
 
-async function trimDone(p) {
+async function trimDone(p, keep = DONE_KEEP) {
   return withTaskLock(p, () => {
     const file = requireStore(p);
     const { lines, endsNL } = readLines(file);
-    const n = spillDone(p, lines);
+    const n = spillDone(p, lines, keep);
     if (n) writeLines(file, lines, endsNL);
     return n;
   });
@@ -1842,8 +1842,10 @@ async function cmdTask(args) {
   }
   if (sub === "trim") {
     const p = projectOf(pos[0] || "");
-    const n = await trimDone(p);
-    console.log(n ? `trimmed ${n} old done task(s)` : "nothing to trim");
+    const keep = flags.keep === undefined ? DONE_KEEP : Number(flags.keep);
+    if (!Number.isInteger(keep) || keep < 0) throw new Error("--keep must be a non-negative integer");
+    const n = await trimDone(p, keep);
+    console.log(n ? `trimmed ${n} old done task(s); kept ${keep}` : `nothing to trim (keeps ${keep})`);
     return;
   }
   if (sub === "migrate") {
