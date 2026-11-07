@@ -167,29 +167,24 @@
   #ideas-view .idea-error:empty{display:none}
   #ideas-view .idea-list{table-layout:fixed;margin-top:12px}
   #ideas-view .idea-list th:first-child{width:28px}
-  #ideas-view .idea-list th:nth-child(2){width:43%}
-  #ideas-view .idea-list th:nth-child(3){width:29%}
+  #ideas-view .idea-list th:nth-child(2){width:32%}
+  #ideas-view .idea-list th:nth-child(3){width:25%}
   #ideas-view .idea-list td{padding-top:10px;padding-bottom:10px;overflow-wrap:anywhere}
   #ideas-view .idea-list td a{font-weight:500}
   #ideas-view .idea-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px}
   #ideas-view .idea-inline-meta,#ideas-view .idea-phone-meta{display:none}
   #ideas-view .idea-select-hit{display:inline-flex;cursor:pointer}
   #ideas-view input[type="checkbox"]{accent-color:var(--foreground);width:16px;height:16px;margin:2px 0;cursor:pointer}
-  #ideas-view .idea-detail{display:grid;grid-template-columns:minmax(0,760px) minmax(180px,240px);gap:24px;align-items:start}
-  #ideas-view .idea-reading{min-width:0;grid-column:1;grid-row:1}
-  #ideas-view .idea-utility{grid-column:2;grid-row:1;border-left:1px solid var(--border);padding-left:20px;min-width:0;overflow-wrap:anywhere}
+  #ideas-view .idea-reading{min-width:0}
   #ideas-view section{border-top:1px solid var(--border);padding:16px 0;min-width:0;overflow-wrap:anywhere}
   #ideas-view .idea-original{white-space:pre-wrap;overflow-wrap:anywhere}
   #ideas-view .idea-assessment{border-top:1px solid var(--border);padding:12px 0}
   #ideas-view .idea-assessment summary{cursor:pointer}
-  #ideas-view .idea-assessment summary>*{display:block;margin-top:4px}
-  #ideas-view .idea-assessment summary>b,#ideas-view .idea-assessment summary>.mono{display:inline}
-  #ideas-view .idea-assessment summary>.mono{margin-left:12px;white-space:nowrap}
   #ideas-view .idea-evidence{padding:8px 0;overflow-wrap:anywhere}
   #ideas-view .idea-source{border-left:1px solid var(--border);padding-left:10px;margin:12px 0}
-  #ideas-view .idea-scroll{max-width:100%;overflow-x:auto}
+  #ideas-view .idea-scroll{max-width:100%;overflow-x:auto;position:relative}
   #ideas-view .idea-compare-desktop table{table-layout:fixed;min-width:calc(176px + var(--idea-columns)*250px)}
-  #ideas-view .idea-compare-desktop th:first-child{width:160px}
+  #ideas-view .idea-compare-desktop th:first-child{width:184px}
   #ideas-view .idea-compare-desktop td{padding:14px 10px;overflow-wrap:anywhere}
   #ideas-view .idea-compare-desktop th .btn{display:block;margin-top:8px;font-size:10.5px}
   #ideas-view .idea-compare-desktop td>.mono,#ideas-view .idea-compare-desktop td>.idea-muted{display:block}
@@ -230,9 +225,6 @@
   #ideas-view .idea-form-error.idea-review{color:var(--foreground)}
   @media(max-width:680px){#ideas-view .idea-definition{grid-template-columns:1fr;gap:4px}#ideas-view .idea-definition dd{margin-bottom:10px}}
   @media(max-width:960px){
-    #ideas-view .idea-detail{display:flex;flex-direction:column;gap:16px}
-    #ideas-view .idea-reading,#ideas-view .idea-utility{width:100%;box-sizing:border-box}
-    #ideas-view .idea-utility{border-left:0;padding-left:0}
     #ideas-view .idea-inline-meta{display:block;margin-top:6px}
     #ideas-view .idea-row-meta,#ideas-view .idea-list th:last-child{display:none}
     #ideas-view .idea-list th:nth-child(2){width:58%}
@@ -264,6 +256,94 @@
     #ideas-view .idea-compare-phone .idea-toolbar{align-items:stretch}
     #ideas-view .idea-compare-phone .idea-toolbar button{flex:1}
   }
+
+  #ideas-view .idea-judgment{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px}
+  #ideas-view .idea-j-favorable{color:var(--judgment-favorable)}
+  #ideas-view .idea-j-mixed{color:var(--judgment-mixed)}
+  #ideas-view .idea-j-unfavorable{color:var(--judgment-unfavorable)}
+  #ideas-view .idea-j-unknown{color:var(--judgment-unknown)}
+  #ideas-view .idea-mark{display:inline-block;box-sizing:border-box;width:10px;height:10px;border:1px solid currentColor;flex:none}
+  #ideas-view .idea-mark.idea-j-favorable{background:currentColor}
+  #ideas-view .idea-mark.idea-j-mixed{box-shadow:inset 0 -4px currentColor}
+  #ideas-view .idea-mark.idea-j-unfavorable{border-width:2px}
+  #ideas-view .idea-mark.idea-j-unknown{border-style:dashed}
+  #ideas-view .idea-strip{display:inline-flex;gap:3px;margin:8px 0}
+  #ideas-view .idea-confidence{display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+  #ideas-view .idea-c-low{color:var(--confidence-low)}
+  #ideas-view .idea-c-medium{color:var(--confidence-medium)}
+  #ideas-view .idea-c-high{color:var(--confidence-high)}
+  #ideas-view .idea-ticks{display:inline-flex;gap:2px}
+  #ideas-view .idea-ticks i{box-sizing:border-box;width:3px;height:10px;border:1px solid currentColor}
+  #ideas-view .idea-ticks .filled{background:currentColor}
+  #ideas-view .idea-fit-value{font-size:32px;line-height:1.2;font-weight:600;display:block;font-variant-numeric:tabular-nums;color:var(--foreground)}
+  #ideas-view .idea-fit-value small{font-size:12px;color:var(--muted-foreground);margin-left:4px;font-weight:400}
+  #ideas-view .idea-coverage{font-size:12px;color:var(--muted-foreground);margin-top:4px}
+  #ideas-view .idea-overview{display:grid;grid-template-columns:176px minmax(0,1fr) minmax(200px,260px);gap:24px;padding:16px 0;border-block:1px solid var(--border)}
+  #ideas-view .idea-overview>div{min-width:0;overflow-wrap:anywhere}
+  #ideas-view .idea-method{font-size:11px}
+  #ideas-view .idea-head>div>p{text-wrap:pretty}
+  #ideas-view .idea-overview-decision>p:first-of-type{font-size:13.5px;font-weight:500}
+  #ideas-view .idea-reading .idea-scroll td:nth-child(3),#ideas-view .idea-reading .idea-scroll td:nth-child(4){text-align:right;font-variant-numeric:tabular-nums}
+  #ideas-view .idea-overview-confidence{margin-top:12px}
+  #ideas-view .idea-breakdown-row{display:grid;align-items:start;grid-template-columns:100px minmax(0,1fr);gap:8px;margin:4px 0}
+  #ideas-view .idea-dimension-links{display:flex;flex-wrap:wrap;gap:0 8px}
+  #ideas-view .idea-breakdown-row .btn{border:0;background:none;padding:0;min-height:0;font:inherit;text-decoration:underline;text-underline-offset:3px;white-space:normal;text-align:left}
+  #ideas-view .idea-assessment summary{display:grid;grid-template-columns:minmax(160px,1.1fr) 112px 160px minmax(0,1.7fr);gap:12px;align-items:baseline;list-style:none}
+  #ideas-view .idea-assessment summary::-webkit-details-marker{display:none}
+  #ideas-view .idea-assessment summary>b:before{content:'▸' / '';margin-right:6px;color:var(--muted-foreground)}
+  #ideas-view .idea-assessment[open] summary>b:before{content:'▾' / ''}
+  #ideas-view .idea-assessment .idea-assumption{grid-column:4;grid-row:2;font-size:11px}
+  #ideas-view .idea-assessment summary>span:last-child:not(.idea-assumption){grid-column:4;grid-row:1}
+  #ideas-view .idea-assessment summary>span:last-child:not(.idea-assumption){min-width:0}
+  #ideas-view .idea-list-fit .idea-fit-value{font-size:18px}
+  #ideas-view .idea-list th:nth-child(4){width:130px}
+  #ideas-view .idea-list-fit .idea-strip{margin-bottom:0}
+  #ideas-view .idea-compare-desktop tbody th{font-size:12px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--foreground)}
+  #ideas-view .idea-compare-desktop td>.idea-confidence{display:flex;margin-top:5px}
+  #ideas-view .idea-matrix{table-layout:fixed;min-width:calc(110px + 120px * var(--idea-columns,2))}
+  #ideas-view .idea-matrix th:first-child{width:110px}
+  #ideas-view .idea-matrix td{padding:8px}
+  #ideas-view .idea-matrix th{font-size:11.5px;text-transform:none;letter-spacing:0;color:inherit}
+  #ideas-view .idea-matrix .btn{font:inherit;white-space:normal;text-align:left;padding:4px;border:0}
+  #ideas-view .idea-matrix .idea-judgment,#ideas-view .idea-matrix .idea-confidence{font-size:11px;display:flex;white-space:normal}
+  #ideas-view .idea-diff{display:inline-flex;align-items:center;gap:8px;min-height:44px}
+  @media(max-width:960px){
+    #ideas-view .idea-overview{grid-template-columns:160px minmax(0,1fr);gap:16px}
+    #ideas-view .idea-overview-breakdown{grid-column:1 / -1;grid-row:2}
+    #ideas-view .idea-list th:nth-child(2){width:40%}
+    #ideas-view .idea-list th:nth-child(3){width:auto}
+  }
+  @media(max-width:759px){
+    #ideas-view .idea-compare-desktop{display:none}
+    #ideas-view .idea-compare-phone{display:block}
+    #ideas-view .idea-assessment summary{grid-template-columns:1fr 1fr;gap:6px 12px}
+    #ideas-view .idea-assessment summary>b,#ideas-view .idea-assessment summary>span:last-child,#ideas-view .idea-assessment .idea-assumption{grid-column:1 / -1}
+    #ideas-view .idea-assessment summary>b{margin-bottom:4px}
+    #ideas-view .idea-assessment summary>span:last-child:not(.idea-assumption){grid-column:1 / -1;grid-row:3}
+    #ideas-view .idea-assessment .idea-assumption{grid-column:1 / -1;grid-row:4}
+  }
+  @media(max-width:680px){
+    #ideas-view .idea-overview{grid-template-columns:1fr}
+    #ideas-view .idea-overview-breakdown{grid-row:3;display:flex;flex-direction:column}
+    #ideas-view .idea-overview-confidence{order:-1;margin-top:0;margin-bottom:12px}
+    #ideas-view .idea-head{flex-wrap:wrap}
+    #ideas-view .idea-head>.idea-toolbar{margin:0 0 8px}
+    #ideas-view .idea-assessment summary>span:last-child:not(.idea-assumption){grid-row:3}
+    #ideas-view .idea-assessment .idea-assumption{grid-row:4}
+    #ideas-view .idea-overview-fit .idea-fit{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+    #ideas-view .idea-method{flex-basis:100%}
+    #ideas-view .idea-list .idea-list-fit{grid-column:2;grid-row:2;display:block}
+    #ideas-view .idea-list .idea-decision{grid-row:3}
+    #ideas-view .idea-list-fit .idea-fit{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    #ideas-view .idea-list-fit .idea-strip{margin:0}
+    #ideas-view .idea-breakdown-row .btn{min-height:44px}
+    #ideas-view .idea-phone-overviews section:first-child{margin-top:8px}
+  }
+  @media(forced-colors:active){
+    #ideas-view .idea-mark,#ideas-view .idea-ticks i{color:CanvasText;forced-color-adjust:none}
+    #ideas-view .idea-mark.idea-j-mixed{box-shadow:inset 0 -4px CanvasText}
+  }
+
 </style>
 </head>
 <body>

@@ -247,5 +247,5 @@ The backlog sequences work; it never invents rules or scope.
   `opc check`. Drift is a bug, not a style choice.
 - Skills: after editing `skills/`, run `npx skills update` so every harness
   picks the change up.
-- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc console [--lan]` (rescans on every open; `--lan` also serves the home wifi for phones) · `opc task …` (the task store; IDs are assigned by `add`). `opc new` arrives with the skeleton.
+- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc hq [--lan]` (alias: `opc console`; rescans on every open; `--lan` also serves the home wifi for phones) · `opc task …` (the task store; IDs are assigned by `add`). `opc new` arrives with the skeleton.
 - The hub itself is registered in `projects.json`, so the console covers it.

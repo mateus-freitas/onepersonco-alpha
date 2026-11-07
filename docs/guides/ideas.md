@@ -4,8 +4,8 @@ In your agent, invoke `$opc-idea` and paste the rough note. The skill captures t
 original text, researches alternatives and acquisition, and saves a bounded
 assessment. Say “capture only” when you want to postpone research.
 
-Open `opc console` and choose **Ideas**. Open an idea to read its assessment or
-select two or three ideas to compare. **Copy research request** copies a prompt
+Run `opc hq` (or `opc console`), open `http://localhost:4770` and choose **Ideas**.
+Open an idea to read its assessment or select two or three ideas to compare. **Copy research request** copies a prompt
 for your agent; paste it there to update the research. It does not start work
 inside HQ. Detailed keyword research and ASO remain in Wow Keywords.
 

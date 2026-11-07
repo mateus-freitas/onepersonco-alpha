@@ -8,7 +8,7 @@
   const btn = (action, text, extra = '') => `<button type="button" class="btn" data-idea-action="${action}" ${extra}>${html(text)}</button>`;
   const link = (id, title) => `<a href="#/ideas/${encodeURIComponent(id)}">${html(title)}</a>`;
   const read = value => html(value || 'Not recorded');
-  const model = {data:null, error:'', loading:false, selected:[], query:'', filter:'active', sort:'updated', dimension:0, expanded:new Set(), edit:null, pending:false, route:'', listScroll:0, returnFocus:null};
+  const model = {data:null, error:'', loading:false, selected:[], query:'', filter:'active', sort:'updated', dimension:0, diffOnly:false, expanded:new Set(), edit:null, pending:false, route:'', listScroll:0, returnFocus:null};
   let capture = null, routeVersion = 0;
   const origins = new Map();
   const mvpLabels=[['scope','Scope'],['exclusions','Exclusions'],['platform','Platform'],['rationale','Platform rationale'],['validation','Validation']];
@@ -36,8 +36,32 @@
   }
   function select(label, name, values, value) { return `<label class="nf"><span id="idea-field-${html(name)}">${html(label)}</span><select aria-labelledby="idea-field-${html(name)}" name="${html(name)}">${options(values,value)}</select></label>`; }
   function assessment(i, key) { return i.assessments?.[key] || {judgment:'unknown',confidence:null}; }
+  const judgmentKeys = ['favorable','mixed','unfavorable','unknown'];
+  function mark(value) { return `<span class="idea-mark idea-j-${html(value)}" aria-hidden="true"></span>`; }
+  function confidence(level, label = '') {
+    if (!level) return '<span class="idea-muted">Not rated</span>';
+    const ticks = ['low','medium','high'].indexOf(level)+1;
+    return `<span class="idea-confidence idea-c-${html(level)}"><span class="idea-ticks" aria-hidden="true">${[1,2,3].map(n=>`<i class="${n<=ticks ? 'filled' : ''}"></i>`).join('')}</span>${html(label || cap(level))} confidence</span>`;
+  }
   function judgment(a) {
-    return `<span class="mono">${html(cap(a.judgment))}${a.confidence ? ` · ${html(cap(a.confidence))} confidence` : ''}</span>${a.judgment !== 'unknown' && !a.evidence?.length ? '<span class="idea-muted">Assumption</span>' : ''}`;
+    return `<span class="idea-judgment idea-j-${html(a.judgment)}">${mark(a.judgment)}${html(cap(a.judgment))}</span> ${confidence(a.confidence)}${a.judgment !== 'unknown' && !a.evidence?.length ? '<span class="idea-muted idea-assumption">Assumption</span>' : ''}`;
+  }
+  function strip(i) {
+    return `<span class="idea-strip" aria-hidden="true">${dimensions().map(d=>mark(assessment(i,d.key).judgment)).join('')}</span><span class="idea-sr">${judgmentKeys.map(k=>`${i.fit?.counts[k] || 0} ${k}`).join(', ')}</span>`;
+  }
+  function fit(i, method=false) {
+    const f=i.fit;
+    if (!f) return '<span class="idea-muted">Fit unavailable</span>';
+    return `<div class="idea-fit"><span class="idea-fit-value mono">${f.value === null ? (f.assessed ? 'Partial' : 'Not scored') : `${f.value}<small>/100</small>`}</span><div class="idea-coverage">${f.assessed} of ${f.total} assessed</div>${strip(i)}${method ? `<details data-idea-disclosure="method" class="idea-method"><summary>How fit is calculated</summary><p>Favorable 2, Mixed 1, Unfavorable 0 points, equal weight; Unknown excluded. ${f.points} of ${2*f.assessed} points${f.value===null ? '' : ` → ${f.value}`}. Fit is shown once at least ${Math.ceil(f.total/2)} dimensions are assessed. A comparison aid, not a probability. Confidence is reported separately.</p></details>` : ''}</div>`;
+  }
+  function confidenceSummary(i) {
+    const f=i.fit;
+    const levels=['high','medium','low'].filter(k=>f?.confidence[k]);
+    const low=dimensions().filter(d=>assessment(i,d.key).confidence==='low');
+    return `<div class="idea-confidence-summary">${levels.length ? levels.map(k=>confidence(k,`${f.confidence[k]} ${k}`)).join(' · ') : '<span class="idea-muted">Not rated</span>'}${low.length ? `<div>Low: ${low.map(d=>html(d.label)).join(', ')}</div>` : ''}</div>`;
+  }
+  function breakdown(i) {
+    return judgmentKeys.map(k=>{const group=dimensions().filter(d=>assessment(i,d.key).judgment===k);return group.length || ['favorable','unfavorable'].includes(k) ? `<div class="idea-breakdown-row"><span class="idea-judgment idea-j-${k}">${mark(k)}${cap(k)}</span><span class="idea-dimension-links">${group.map(d=>btn('assessment',d.label,`data-idea-dimension="${html(d.key)}"`)).join('') || '<span class="idea-muted">None</span>'}</span></div>` : '';}).join('');
   }
   function source(s, i) {
     return `<div class="idea-source"><b>${html(s.id)} · ${s.url ? external(s.url,s.title) : html(s.title)}</b><div class="idea-muted">${html([s.publisher, s.publishedAt && `Published ${s.publishedAt}`, s.checkedAt && `Checked ${s.checkedAt}`].filter(Boolean).join(' · '))}</div><p>${html(s.note)}</p></div>`;
@@ -48,7 +72,7 @@
   }
   function listRows() {
     const q = model.query.toLocaleLowerCase();
-    return model.data.ideas.filter(i => (model.filter === 'all' || (model.filter === 'active' ? i.state !== 'archived' : i.state === model.filter)) && [i.title,i.summary,i.original].some(v => String(v || '').toLocaleLowerCase().includes(q))).sort((a,b) => model.sort === 'title' ? a.title.localeCompare(b.title) : model.sort === 'research' ? (a.researchDate || '').localeCompare(b.researchDate || '') : b.updatedAt.localeCompare(a.updatedAt));
+    return model.data.ideas.filter(i => (model.filter === 'all' || (model.filter === 'active' ? i.state !== 'archived' : i.state === model.filter)) && [i.title,i.summary,i.original].some(v => String(v || '').toLocaleLowerCase().includes(q))).sort((a,b) => model.sort === 'title' ? a.title.localeCompare(b.title) : model.sort === 'fit' ? ((b.fit?.value ?? -1)-(a.fit?.value ?? -1) || (b.fit?.assessed || 0)-(a.fit?.assessed || 0) || b.updatedAt.localeCompare(a.updatedAt)) : model.sort === 'research' ? (a.researchDate || '').localeCompare(b.researchDate || '') : b.updatedAt.localeCompare(a.updatedAt));
   }
   function selection() {
     return model.selected.length ? `<div class="idea-toolbar"><span>${model.selected.length} selected</span>${btn('compare',`Compare (${model.selected.length})`,model.selected.length < 2 ? 'disabled' : '')}${btn('clear','Clear')}</div>` : '';
@@ -57,38 +81,49 @@
     const target = root.querySelector('#idea-results');
     if (!target) return;
     const rows = listRows();
-    target.innerHTML = `${rows.length ? `<table class="idea-list"><thead><tr><th scope="col"><span class="idea-sr">Compare</span></th><th scope="col">Idea</th><th scope="col">Next decision</th><th scope="col">State / project</th></tr></thead><tbody>${rows.map(i => `<tr><td><label class="idea-select-hit"><input type="checkbox" data-idea-select="${html(i.id)}" aria-label="Select ${html(i.title)} for comparison"${model.selected.includes(i.id) ? ' checked' : ''}></label></td><td>${link(i.id,i.title)}<div class="idea-summary idea-muted">${html(i.summary)}</div><div class="idea-inline-meta">${html(cap(i.state))}${i.projectId ? ' · '+projectLink(i.projectId) : ''}</div></td><td class="idea-decision">${html(i.nextDecision || 'Not assessed')}<div class="idea-phone-meta">${html(cap(i.state))}${i.projectId ? ' · '+projectLink(i.projectId) : ''}</div></td><td class="idea-row-meta">${html(cap(i.state))}${i.projectId ? '<br>'+projectLink(i.projectId) : ''}</td></tr>`).join('')}</tbody></table>` : `<p>${model.data.ideas.length ? 'No ideas match these filters.' : 'No ideas yet.'}</p>${model.data.ideas.length ? btn('reset','Clear filters') : LIVE ? btn('capture','Create idea') : ''}`}<div id="idea-selection">${selection()}</div><p class="idea-error" id="idea-selection-error" role="status"></p>`;
+    target.innerHTML = `${rows.length ? `<table class="idea-list"><thead><tr><th scope="col"><span class="idea-sr">Compare</span></th><th scope="col">Idea</th><th scope="col">Next decision</th><th scope="col">Fit</th><th scope="col">State / project</th></tr></thead><tbody>${rows.map(i => `<tr><td><label class="idea-select-hit"><input type="checkbox" data-idea-select="${html(i.id)}" aria-label="Select ${html(i.title)} for comparison"${model.selected.includes(i.id) ? ' checked' : ''}></label></td><td>${link(i.id,i.title)}<div class="idea-summary idea-muted">${html(i.summary)}</div><div class="idea-inline-meta">${html(cap(i.state))}${i.projectId ? ' · '+projectLink(i.projectId) : ''}</div></td><td class="idea-decision">${html(i.nextDecision || 'Not assessed')}<div class="idea-phone-meta">${html(cap(i.state))}${i.projectId ? ' · '+projectLink(i.projectId) : ''}</div></td><td class="idea-list-fit"><span class="idea-sr">Fit </span>${fit(i)}</td><td class="idea-row-meta">${html(cap(i.state))}${i.projectId ? '<br>'+projectLink(i.projectId) : ''}</td></tr>`).join('')}</tbody></table>` : `<p>${model.data.ideas.length ? 'No ideas match these filters.' : 'No ideas yet.'}</p>${model.data.ideas.length ? btn('reset','Clear filters') : LIVE ? btn('capture','Create idea') : ''}`}<div id="idea-selection">${selection()}</div><p class="idea-error" id="idea-selection-error" role="status"></p>`;
   }
   function renderList() {
-    root.innerHTML = `<div class="idea-head"><h2 tabindex="-1">Ideas</h2>${LIVE ? btn('capture','+ new idea') : ''}</div><div class="idea-toolbar"><label class="nf idea-search"><span>Search ideas</span><input type="search" id="idea-search" value="${html(model.query)}"></label>${select('State','filter',[['active','All except Archived'],['all','All states'],...model.data.states],model.filter)}${select('Sort','sort',[['updated','Updated newest'],['title','Title A–Z'],['research','Research date oldest']],model.sort)}</div><div id="idea-load-error">${loadError()}</div><div id="idea-results"></div>`;
+    root.innerHTML = `<div class="idea-head"><h2 tabindex="-1">Ideas</h2>${LIVE ? btn('capture','+ new idea') : ''}</div><div class="idea-toolbar"><label class="nf idea-search"><span>Search ideas</span><input type="search" id="idea-search" value="${html(model.query)}"></label>${select('State','filter',[['active','All except Archived'],['all','All states'],...model.data.states],model.filter)}${select('Sort','sort',[['updated','Updated newest'],['fit','Fit highest'],['title','Title A–Z'],['research','Research date oldest']],model.sort)}</div><div id="idea-load-error">${loadError()}</div><div id="idea-results"></div>`;
     renderListResults();
   }
   function detail(i) {
     const mvp=mvpLabels.filter(([key])=>i.mvp?.[key]);
-    root.innerHTML=`${back()}<div class="idea-head"><div><h2 tabindex="-1">${html(i.title)}</h2><span>${html(cap(i.state))}</span></div>${LIVE ? btn('edit','Edit') : ''}</div>
-      <div class="idea-detail"><aside class="idea-utility"><h3>Next decision</h3><p>${read(i.nextDecision)}</p>${i.projectId ? `<h3>Project</h3><p>${projectLink(i.projectId)}</p>` : ''}${LIVE && i.projectId && !project(i.projectId) ? btn('edit','Change project') : ''}<h3>Research date</h3><p>${i.researchDate ? `<span class="mono">${html(i.researchDate)}</span>` : 'Not researched'}</p>${btn('research','Copy research request')}<div id="idea-copy-result" role="status"></div></aside>
-      <div class="idea-reading">${i.summary ? `<section><h3>Summary</h3><p>${html(i.summary)}</p></section>` : ''}
-      <section><details data-idea-disclosure="original" ${i.original.length < 600 ? 'open' : ''}><summary><h3>Original idea</h3></summary><div class="idea-original">${read(i.original)}</div></details></section>
-      <section id="idea-assessments"><div class="idea-head"><h3>Assessment</h3>${LIVE ? btn('edit-assessment','Edit assessment') : ''}</div>${dimensions().map(d=>{const a=assessment(i,d.key);return `<details class="idea-assessment" data-idea-disclosure="${html(d.key)}"><summary><b>${html(d.label)}</b>${judgment(a)}<span>${html(a.reason || a.nextQuestion || 'Not assessed')}</span></summary><p class="idea-muted">Favorable: ${html(d.favorable)}</p>${evidence(i,a)}</details>`;}).join('')}</section>
-      <section><h3>MVP</h3>${mvp.length ? `<dl class="idea-definition">${mvp.map(([key,label])=>`<dt>${label}</dt><dd>${html(i.mvp[key])}</dd>`).join('')}</dl>` : '<p>Not recorded</p>'}</section>
+    root.innerHTML=`${back()}<div class="idea-head"><div><h2 tabindex="-1">${html(i.title)}</h2><span>${html(cap(i.state))}${i.projectId ? ' · '+projectLink(i.projectId) : ''}</span><p class="idea-muted">${html(i.summary)}</p></div><div class="idea-toolbar">${btn('research','Copy research request')}${LIVE ? btn('edit','Edit') : ''}</div></div><div id="idea-copy-result" role="status"></div>
+      <div class="idea-overview"><div class="idea-overview-fit"><h3>Fit</h3>${fit(i,true)}</div><div class="idea-overview-breakdown"><div class="idea-breakdown">${breakdown(i)}</div><div class="idea-overview-confidence"><h3>Confidence</h3>${confidenceSummary(i)}</div>${dimensions().some(d=>assessment(i,d.key).judgment!=='unknown' && !assessment(i,d.key).evidence?.length) ? `<p>Assumptions: ${dimensions().filter(d=>assessment(i,d.key).judgment!=='unknown' && !assessment(i,d.key).evidence?.length).length}</p>` : ''}${i.fit?.assessed > 0 && !dimensions().some(d=>assessment(i,d.key).counterevidence?.length) ? '<p class="idea-muted">Counterevidence: none recorded</p>' : ''}</div><div class="idea-overview-decision"><h3>Next decision</h3><p>${read(i.nextDecision)}</p><p class="idea-muted">${i.researchDate ? 'Researched '+html(i.researchDate) : 'Not researched'}</p>${LIVE && i.projectId && !project(i.projectId) ? btn('edit','Change project') : ''}</div></div>
+      <div class="idea-reading">
+      <section id="idea-assessments"><div class="idea-head"><h3>Assessment</h3>${LIVE ? btn('edit-assessment','Edit assessment') : ''}</div>${dimensions().map(d=>{const a=assessment(i,d.key);return `<details class="idea-assessment" id="idea-dim-${html(d.key)}" data-idea-disclosure="${html(d.key)}"><summary><b>${html(d.label)}</b>${judgment(a)}<span>${html(a.reason || a.nextQuestion || 'Not assessed')}</span></summary><p class="idea-muted">Favorable: ${html(d.favorable)}</p>${evidence(i,a)}</details>`;}).join('')}</section>
       ${i.questions?.length ? `<section><h3>Open questions</h3>${i.questions.map(q=>`<h4>${html(q.question)}</h4><p>${html(q.nextStep)}</p>`).join('')}</section>` : ''}
-      <section><h3>Sources</h3>${i.sources?.length ? i.sources.map(item=>source(item,i)).join('') : '<p>No sources recorded.</p>'}</section>
-      ${i.keywords?.length ? `<section><h3>Keyword evidence</h3><div class="idea-scroll" role="region" aria-label="Keyword evidence" tabindex="0"><table><thead><tr>${['Term','Market / language','Wow volume (proxy, not searches)','Difficulty (0–100)','Checked','Source'].map(t=>`<th scope="col">${t}</th>`).join('')}</tr></thead><tbody>${i.keywords.map(k=>`<tr><th scope="row">${html(k.term)}</th><td>${html(k.market)} ${html(k.language)}</td><td>${k.volume == null ? 'Not measured' : html(k.volume)}</td><td>${k.difficulty == null ? 'Not measured' : html(k.difficulty)}</td><td>${html(k.checkedAt)}</td><td>${html(k.sourceId)}</td></tr>`).join('')}</tbody></table></div></section>` : ''}</div></div>`;
+      <section><h3>MVP</h3>${mvp.length ? `<dl class="idea-definition">${mvp.map(([key,label])=>`<dt>${label}</dt><dd>${html(i.mvp[key])}</dd>`).join('')}</dl>` : '<p>Not recorded</p>'}</section>
+      <section><details data-idea-disclosure="original" ${i.original.length < 600 ? 'open' : ''}><summary><h3>Original idea</h3></summary><div class="idea-original">${read(i.original)}</div></details></section>
+      <section><details data-idea-disclosure="sources"><summary><h3>Sources</h3></summary>${i.sources?.length ? i.sources.map(item=>source(item,i)).join('') : '<p>No sources recorded.</p>'}</details></section>
+      ${i.keywords?.length ? `<section><h3>Keyword evidence</h3><div class="idea-scroll" role="region" aria-label="Keyword evidence" tabindex="0"><table><thead><tr>${['Term','Market / language','Wow volume (proxy, not searches)','Difficulty (0–100)','Checked','Source'].map(t=>`<th scope="col">${t}</th>`).join('')}</tr></thead><tbody>${i.keywords.map(k=>`<tr><th scope="row">${html(k.term)}</th><td>${html(k.market)} ${html(k.language)}</td><td>${k.volume == null ? 'Not measured' : html(k.volume)}</td><td>${k.difficulty == null ? 'Not measured' : html(k.difficulty)}</td><td>${html(k.checkedAt)}</td><td>${html(k.sourceId)}</td></tr>`).join('')}</tbody></table></div></section>` : ''}</div>`;
   }
   function compareCell(i,key,expanded=false) {
     if(!i)return '<p>Idea unavailable.</p>';
+    if(key==='fit')return fit(i);
+    if(key==='confidence')return confidenceSummary(i);
     if(key==='decision')return read(i.nextDecision);
     if(key==='mvp')return `<p>${read(i.mvp?.scope)}</p><p>${read(i.mvp?.platform)}</p>`;
     const a=assessment(i,key);
-    return `${judgment(a)}${expanded ? evidence(i,a,true) : `<p class="idea-clamp">${html(a.reason || a.nextQuestion || 'Not assessed')}</p>`}`;
+    return `${judgment(a)}${expanded ? evidence(i,a,true) : `<p>${html(a.reason || a.nextQuestion || 'Not assessed')}</p>`}`;
   }
   function compare() {
-    const rows=[...dimensions(),{key:'decision',label:'Next decision'},{key:'mvp',label:'MVP / platform'}];
-    const chosen=model.selected.map(find),row=rows[model.dimension] || rows[0];
+    const chosen=model.selected.map(find);
+    const matching=d=>chosen.length>1 && chosen.every(Boolean) && chosen.every(i=>{const a=assessment(i,d.key), b=assessment(chosen[0],d.key);return a.judgment===b.judgment && a.confidence===b.confidence;});
+    const visible=dimensions().filter(d=>!model.diffOnly || !matching(d));
+    const rows=[{key:'fit',label:'Fit'},{key:'confidence',label:'Confidence'},{key:'decision',label:'Next decision'},...visible,{key:'mvp',label:'MVP / platform'}];
+    // The focus selector keeps canonical dimension indices even while rows are filtered.
+    if (!visible.includes(dimensions()[model.dimension]) && visible.length) model.dimension=dimensions().indexOf(visible[0]);
+    const row=dimensions()[model.dimension];
     const toggle=d=>chosen.some(i=>{const a=i && assessment(i,d.key);return a && (a.reason || a.rationale || a.evidence?.length || a.counterevidence?.length);}) && dimensions().some(v=>v.key===d.key) ? btn('evidence','Evidence',`data-idea-dimension="${html(d.key)}" aria-expanded="${model.expanded.has(d.key)}"`) : '';
     const remove=(i,n)=>btn('remove','Remove',`aria-label="Remove ${html(i?.title || model.selected[n])}" data-idea-id="${html(model.selected[n])}"`);
-    root.innerHTML=`${back()}<div class="idea-head"><h2 tabindex="-1">Compare ideas</h2></div>${chosen.length<2 ? '<a href="#/ideas">Select another idea to compare</a>' : ''}${!chosen.length ? '' : `<div class="idea-compare-desktop idea-scroll" role="region" aria-label="Idea comparison" tabindex="0"><table style="--idea-columns:${chosen.length}"><thead><tr><th scope="col">Dimension</th>${chosen.map((i,n)=>`<th scope="col">${i ? link(i.id,i.title) : html(model.selected[n])+' · Idea unavailable'}${remove(i,n)}</th>`).join('')}</tr></thead><tbody>${rows.map(d=>`<tr><th scope="row">${html(d.label)}${toggle(d)}${model.expanded.has(d.key) && d.favorable ? `<p class="idea-rubric">Favorable: ${html(d.favorable)}</p>` : ''}</th>${chosen.map(i=>`<td>${compareCell(i,d.key,model.expanded.has(d.key))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
-      <div class="idea-compare-phone">${select('Dimension','dimension',rows.map((d,n)=>[String(n),d.label]),String(model.dimension))}<div class="idea-toolbar">${btn('previous','Previous dimension',model.dimension===0 ? 'disabled' : '')}${btn('next','Next dimension',model.dimension===rows.length-1 ? 'disabled' : '')}</div>${toggle(row)}${model.expanded.has(row.key) && row.favorable ? `<p>Favorable: ${html(row.favorable)}</p>` : ''}${chosen.map((i,n)=>`<section><h3>${i ? link(i.id,i.title) : html(model.selected[n])+' · Idea unavailable'}</h3>${compareCell(i,row.key,model.expanded.has(row.key))}${remove(i,n)}</section>`).join('')}</div>`}`;
+    const name=(i,n)=>i ? link(i.id,i.title) : html(model.selected[n])+' · Idea unavailable';
+    const hidden=dimensions().length-visible.length;
+    root.innerHTML=`${back()}<div class="idea-head"><h2 tabindex="-1">Compare ideas</h2></div>${chosen.length<2 ? '<a href="#/ideas">Select another idea to compare</a>' : ''}${chosen.length > 1 ? `<label class="idea-diff"><input type="checkbox" name="differences" ${model.diffOnly ? 'checked' : ''}> Differences only</label>` : ''}${hidden ? `<p class="idea-muted">${hidden===dimensions().length ? 'No differing assessments. ' : ''}${hidden} matching dimensions hidden.</p>` : ''}${!chosen.length ? '' : `<div class="idea-compare-desktop idea-scroll" role="region" aria-label="Idea comparison" tabindex="0"><table style="--idea-columns:${chosen.length}"><thead><tr><th scope="col">Dimension</th>${chosen.map((i,n)=>`<th scope="col">${name(i,n)}${remove(i,n)}</th>`).join('')}</tr></thead><tbody>${rows.map(d=>`<tr><th scope="row">${html(d.label)}${toggle(d)}${model.expanded.has(d.key) && d.favorable ? `<p class="idea-rubric">Favorable: ${html(d.favorable)}</p>` : ''}</th>${chosen.map(i=>`<td>${compareCell(i,d.key,model.expanded.has(d.key))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <div class="idea-compare-phone"><div class="idea-phone-overviews">${chosen.map((i,n)=>`<section><h3>${name(i,n)}</h3>${i ? `<h4>Fit</h4>${fit(i)}<h4>Confidence</h4>${confidenceSummary(i)}<h4>Next decision</h4><p>${read(i.nextDecision)}</p>` : '<p>Idea unavailable.</p>'}${remove(i,n)}</section>`).join('')}</div>
+      <div class="idea-scroll" role="region" aria-label="Assessment breakdown" tabindex="0"><table class="idea-matrix" style="--idea-columns:${chosen.length}"><thead><tr><th scope="col">Dimension</th>${chosen.map((i,n)=>`<th scope="col">${name(i,n)}</th>`).join('')}</tr></thead><tbody>${visible.map(d=>`<tr><th scope="row">${btn('dimension',d.label,`data-idea-dimension="${html(d.key)}"`)}</th>${chosen.map(i=>`<td>${i ? judgment(assessment(i,d.key)) : 'Idea unavailable'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      ${visible.length ? `<div id="idea-focused-dimension" tabindex="-1">${select('Dimension','dimension',visible.map(d=>[String(dimensions().indexOf(d)),d.label]),String(model.dimension))}<div class="idea-toolbar">${btn('previous','Previous dimension',visible.indexOf(row)<=0 ? 'disabled' : '')}${btn('next','Next dimension',visible.indexOf(row)===visible.length-1 ? 'disabled' : '')}</div>${toggle(row)}${model.expanded.has(row.key) ? `<p>Favorable: ${html(row.favorable)}</p>` : ''}${chosen.map((i,n)=>`<section><h3>${name(i,n)}</h3>${compareCell(i,row.key,model.expanded.has(row.key))}</section>`).join('')}</div>` : ''}<section><h3>MVP / platform</h3>${chosen.map((i,n)=>`<h4>${name(i,n)}</h4>${compareCell(i,'mvp')}`).join('')}</section></div>`}`;
   }
   function loadError() {return model.error ? `<p class="idea-error" role="alert">Ideas could not be loaded. ${html(model.error)} ${btn('refresh','Retry')}</p>` : '';}
   async function refresh() {
@@ -99,7 +134,7 @@
     const disclosure=focused?.closest('[data-idea-disclosure]')?.dataset.ideaDisclosure;
     const selectedIdea=focused?.dataset.ideaSelect, focusedHref=focused?.getAttribute('href');
     const action=focused?.dataset.ideaAction, dimension=focused?.dataset.ideaDimension;
-    const presentation=focused?.closest('.idea-compare-phone') ? '.idea-compare-phone' : '.idea-compare-desktop';
+    const presentation=focused?.closest('.idea-compare-phone') ? '.idea-compare-phone' : focused?.closest('.idea-compare-desktop') ? '.idea-compare-desktop' : '';
     const opened=Array.from(root.querySelectorAll('[data-idea-disclosure][open]')).map(el=>el.dataset.ideaDisclosure);
     try {
       const response = await fetch('./ideas.json',{cache:'no-store'});
@@ -112,7 +147,7 @@
     if (active() && !model.edit && !capture && (priorData!==JSON.stringify(model.data) || priorError!==model.error)) {
       paint(false);
       for(const key of opened){const item=root.querySelector(`[data-idea-disclosure="${CSS.escape(key)}"]`);if(item)item.open=true;}
-      const target=focusId ? document.getElementById(focusId) : focusName ? root.querySelector(`[name="${CSS.escape(focusName)}"]`) : disclosure ? root.querySelector(`[data-idea-disclosure="${CSS.escape(disclosure)}"] > summary`) : dimension ? root.querySelector(`${presentation} [data-idea-dimension="${CSS.escape(dimension)}"]`) : action ? root.querySelector(`[data-idea-action="${CSS.escape(action)}"]`) : null;
+      const target=focusId ? document.getElementById(focusId) : focusName ? root.querySelector(`[name="${CSS.escape(focusName)}"]`) : disclosure ? root.querySelector(`[data-idea-disclosure="${CSS.escape(disclosure)}"] > summary`) : dimension ? root.querySelector(`${presentation} [data-idea-action="${CSS.escape(action)}"][data-idea-dimension="${CSS.escape(dimension)}"]`) : action ? root.querySelector(`[data-idea-action="${CSS.escape(action)}"]`) : null;
       const restored=target || (selectedIdea ? root.querySelector(`[data-idea-select="${CSS.escape(selectedIdea)}"]`) : focusedHref ? root.querySelector(`a[href="${CSS.escape(focusedHref)}"]`) : null);
       restored?.focus({preventScroll:true});
       if(target?.setSelectionRange && selectionStart!=null)target.setSelectionRange(selectionStart,selectionEnd);
@@ -320,6 +355,7 @@
       root.querySelector('#idea-selection').innerHTML=selection();root.querySelector('#idea-selection-error').textContent='';
     }
     if(['filter','sort'].includes(e.target.name) && !model.edit){model[e.target.name]=e.target.value;renderListResults();}
+    if(e.target.name === 'differences'){model.diffOnly=e.target.checked;compare();root.querySelector('[name="differences"]').focus();}
     if(e.target.name === 'dimension'){model.dimension=Number(e.target.value);compare();root.querySelector('[name="dimension"]').focus();}
     if(e.target.name?.endsWith('.judgment')){
       const key=e.target.name.split('.')[0], confidence=model.edit?.form.elements[`${key}.confidence`];
@@ -348,9 +384,17 @@
       if(model.expanded.has(key))model.expanded.delete(key);else model.expanded.add(key);
       const presentation=button.closest('.idea-compare-phone') ? '.idea-compare-phone' : '.idea-compare-desktop';
       const y=window.scrollY;compare();window.scrollTo(0,y);
-      root.querySelector(`${presentation} [data-idea-dimension="${key}"]`)?.focus({preventScroll:true});
+      root.querySelector(`${presentation} [data-idea-action="evidence"][data-idea-dimension="${key}"]`)?.focus({preventScroll:true});
     }
-    if(action === 'previous' || action === 'next'){model.dimension+=action === 'next' ? 1 : -1;compare();root.querySelector(`[data-idea-action="${action}"]`)?.focus();}
+    if(action === 'assessment'){
+      const target=root.querySelector(`[data-idea-disclosure="${CSS.escape(button.dataset.ideaDimension)}"]`);
+      if(target){target.open=true;target.querySelector('summary').focus();target.scrollIntoView({block:'start'});}
+    }
+    if(action === 'dimension'){model.dimension=dimensions().findIndex(d=>d.key===button.dataset.ideaDimension);compare();root.querySelector('[name="dimension"]').focus();root.querySelector('#idea-focused-dimension').scrollIntoView({block:'start'});}
+    if(action === 'previous' || action === 'next'){
+      const choices=Array.from(root.querySelector('[name="dimension"]').options).map(o=>Number(o.value));
+      model.dimension=choices[choices.indexOf(model.dimension)+(action==='next' ? 1 : -1)];compare();root.querySelector(`[data-idea-action="${action}"]`)?.focus();
+    }
     if(action==='rebase' && model.edit){
       const old=model.edit, values=Object.fromEntries(new FormData(old.form)), initial=Object.fromEntries(JSON.parse(old.initial));
       busy(old.form,true);

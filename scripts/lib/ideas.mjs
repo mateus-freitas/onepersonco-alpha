@@ -103,8 +103,23 @@ function validateIdea(i) {
     checked(k.checkedAt); if (!sourceIds.has(k.sourceId)) fail('dangling keyword source');
   }
 }
+// Read projection only: confidence describes evidence, never adjusts judgment points.
+export function deriveFit(assessments = {}) {
+  const counts = { favorable: 0, mixed: 0, unfavorable: 0, unknown: 0 };
+  const confidence = { high: 0, medium: 0, low: 0 };
+  for (const key of dimensionKeys) {
+    const a = assessments[key];
+    const judgment = a?.judgment || 'unknown';
+    counts[judgment]++;
+    if (judgment !== 'unknown' && Object.hasOwn(confidence, a?.confidence)) confidence[a.confidence]++;
+  }
+  const total = dimensionKeys.length, assessed = total - counts.unknown;
+  const points = counts.favorable * 2 + counts.mixed;
+  return { points, assessed, total, value: assessed < Math.ceil(total / 2) ? null : Math.round(100 * points / (2 * assessed)), counts, confidence };
+}
 export function derive(i) {
   const out = structuredClone(i);
+  out.fit = deriveFit(i.assessments);
   out.researchDate = Object.values(i.assessments).map(a => a.reviewedAt).filter(Boolean).sort().at(-1) || null;
   for (const a of Object.values(out.assessments)) a.assumption = a.judgment !== 'unknown' && !a.evidence.length;
   return out;
@@ -235,7 +250,8 @@ export function createIdeasStore({ root, projects = () => [], lockTimeout = 5000
 }
 
 export function exportMarkdown(i) {
-  const lines = [`# ${i.title}`, '', `${i.id} · ${i.state} · revision ${i.revision}`, '', '## Original', '', i.original, '', '## Summary', '', i.summary, '', '## Next decision', '', i.nextDecision, '', '## MVP'];
+  const fit = deriveFit(i.assessments);
+  const lines = [`# ${i.title}`, '', `${i.id} · ${i.state} · revision ${i.revision}`, '', `Fit: ${fit.value === null ? (fit.assessed ? 'Partial' : 'Not scored') : fit.value + '/100'} · ${fit.assessed} of ${fit.total} assessed`, '', '## Original', '', i.original, '', '## Summary', '', i.summary, '', '## Next decision', '', i.nextDecision, '', '## MVP'];
   for (const [k, v] of Object.entries(i.mvp)) lines.push('', `### ${k}`, '', v);
   for (const d of dimensions) { const a = i.assessments[d.key]; lines.push('', `## ${d.label}`, '', `${a.judgment} · ${a.confidence ?? 'unknown'}${a.assumption ? ' · assumption' : ''}`, '', a.reason, '', a.rationale, '', `Evidence: ${a.evidence.join(', ') || 'none'}`, `Counterevidence: ${a.counterevidence.join(', ') || 'none'}`, `Next question: ${a.nextQuestion}`, `Reviewed: ${a.reviewedAt ?? 'unknown'}`); }
   lines.push('', '## Questions', ...i.questions.map(q => `\n- ${q.question} — ${q.nextStep}`), '', '## Sources', ...i.sources.map(s => `\n- ${s.id}: ${s.title} (${s.publisher}) ${s.url ?? ''} · published ${s.publishedAt ?? 'unknown'} · checked ${s.checkedAt}\n  ${s.note}`), '', '## Keywords', ...i.keywords.map(k => `\n- ${k.term} · ${k.market} ${k.language ?? ''} · volume ${k.volume ?? 'unknown'} · difficulty ${k.difficulty ?? 'unknown'} · ${k.sourceId} · checked ${k.checkedAt}`), '', `Research date: ${i.researchDate ?? 'unknown'}`, `Project: ${i.projectId ?? 'none'}`);

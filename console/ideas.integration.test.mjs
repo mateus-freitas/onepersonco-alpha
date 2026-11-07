@@ -23,11 +23,11 @@ test('real console: capture without URL, edit, CLI conflict and refresh, snapsho
   await new Promise(r=>reserve.listen(0,'127.0.0.1',r));
   const port=reserve.address().port;
   await new Promise(r=>reserve.close(r));
-  const server=spawn(process.execPath,[opc,'console','--port',String(port)],{env,cwd:fixture});
+  const server=spawn(process.execPath,[opc,'hq','--port',String(port)],{env,cwd:fixture});
   t.after(()=>{if(server.exitCode===null)server.kill();});
   await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>reject(Error('Fixture startup timeout')),5000);
-    server.stdout.on('data',d=>{if(d.toString().includes('opc console →')){clearTimeout(timer);resolve();}});
+    server.stdout.on('data',d=>{if(d.toString().includes('opc hq →')){clearTimeout(timer);resolve();}});
     server.once('exit',code=>{clearTimeout(timer);reject(Error(`Fixture exited ${code}`));});
     server.stderr.on('data',d=>{clearTimeout(timer);reject(Error(d.toString()));});
   });

@@ -202,7 +202,7 @@ test('fixture console integration: guarded routes, JSON MIME, independent ideas,
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('fixture server startup timed out')), 5000);
     child.once('exit', code => { clearTimeout(timer); reject(new Error(`fixture server exit ${code}`)); });
-    child.stdout.on('data', d => { if (d.toString().includes('opc console →')) { clearTimeout(timer); resolve(); } });
+    child.stdout.on('data', d => { if (d.toString().includes('opc hq →')) { clearTimeout(timer); resolve(); } });
     child.stderr.on('data', d => { clearTimeout(timer); reject(new Error(d.toString())); });
   });
   const request = (route, { method = 'GET', host = `localhost:${port}`, origin, body, contentType } = {}) => new Promise((resolve, reject) => {

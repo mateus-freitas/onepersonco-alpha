@@ -74,8 +74,10 @@ do not fabricate metrics or silently replace them with model guesses.
 ## Assess for a solo owner
 
 Use the CLI's seven dimensions and qualitative judgments. Favorable always means
-attractive for this owner, including low ongoing burden. No invented weighted
-score or automatic winner. Confidence reflects relevant evidence, not source
+attractive for this owner, including low ongoing burden. The CLI derives an
+equal-weight Fit score from these judgments; never author or patch `fit`, invent
+another weighted score, or declare an automatic winner. Confidence remains
+separate from Fit and reflects relevant evidence, not source
 count: Low is assumption or indirect evidence; Medium is relevant but partial
 evidence; High needs converging independent evidence or direct validation of
 the actual proposition, with its remaining limits stated. Unknown means unassessed or insufficient evidence, not unfavorable.

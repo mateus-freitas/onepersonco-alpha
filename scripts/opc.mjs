@@ -2321,9 +2321,9 @@ async function cmdConsole(args) {
 
   server.on("error", (err) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`opc console: port ${port} is already in use — another console is probably running (kill it, or use --port <N>)`);
+      console.error(`opc hq: port ${port} is already in use — another console is probably running (kill it, or use --port <N>)`);
     } else {
-      console.error(`opc console: ${err.message}`);
+      console.error(`opc hq: ${err.message}`);
     }
     process.exit(1);
   });
@@ -2333,7 +2333,7 @@ async function cmdConsole(args) {
   const healthLine = h.errors + h.warnings + h.infos ? `health: ${healthCounts(h)}` : "health: clean";
   const pending = data.projects.filter((p) => p.exists && !p.backlog).map((p) => p.id);
   server.listen(port, lan ? "0.0.0.0" : "127.0.0.1", () => {
-    console.log(`opc console → http://localhost:${port}`);
+    console.log(`opc hq → http://localhost:${port}`);
     if (lan) {
       const nets = Object.entries(os.networkInterfaces())
         .flatMap(([name, addrs]) => (addrs || []).map((a) => ({ name, ...a })));
@@ -2361,11 +2361,11 @@ async function main() {
   if (cmd === "sync") return cmdSync(args);
   if (cmd === "check") return cmdCheck(args);
   if (cmd === "scan") return cmdScan(args);
-  if (cmd === "console") return cmdConsole(args);
+  if (cmd === "hq" || cmd === "console") return cmdConsole(args);
   if (cmd === "task") {
     try { return await cmdTask(args); } catch (err) { console.error(err.message); process.exit(1); }
   }
-  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot [--ideas]]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  opc idea --help   private idea store and research rubric\n  opc task add|list|show|search|move|edit|done|cancel|restore|clean|trim|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot [--ideas]]   write console/data.json (and a self-contained snapshot.html)\n  opc hq [--port N] [--lan]  open HQ; --lan also answers your home wifi (alias: opc console)\n  opc idea --help   private idea store and research rubric\n  opc task add|list|show|search|move|edit|done|cancel|restore|clean|trim|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 

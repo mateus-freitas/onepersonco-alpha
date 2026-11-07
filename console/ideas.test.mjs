@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {deriveFit} from '../scripts/lib/ideas.mjs';
 import {readFile, mkdir} from 'node:fs/promises';
 
 // No server or live requests: Chromium receives only synthetic, intercepted routes.
@@ -22,7 +23,7 @@ async function setup({snapshot=false, missing=false, failure=false}={}) {
   records[1].keywords=[{term:'synthetic query',market:'PT',language:'pt',volume:null,difficulty:0,checkedAt:'2026-11-07',sourceId:'S1'}];
   let writeGate=null;
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  const data=()=>({ok:true,ideas:records,dimensions,states,projects:[{id:'synthetic',name:'Synthetic project'}]});
+  const data=()=>({ok:true,ideas:records.map(i=>({...i,fit:deriveFit(i.assessments)})),dimensions,states,projects:[{id:'synthetic',name:'Synthetic project'}]});
   await page.route('http://ideas.test/**',async route=>{
     const url=new URL(route.request().url());
     if(url.pathname === '/ideas.json')return route.fulfill({status:failure?500:200,json:failure?{ok:false,error:'Synthetic read failure'}:data()});
@@ -64,7 +65,7 @@ test('navigation, list search, selection cap, comparison, project isolation and 
   await page.locator('[data-idea-select="idea-4"]').click();assert.equal(await page.locator('[data-idea-select="idea-4"]').isChecked(),false);
   assert.match(await page.locator('#idea-selection-error').textContent(),/up to 3/);
   await page.locator('#idea-search').fill('Problem 2');assert.equal(await page.locator('.idea-list tbody tr').count(),1);
-  await page.getByRole('button',{name:'Compare (3)',exact:true}).click();await page.locator('.idea-compare-desktop').waitFor();assert.equal(await page.locator('.idea-compare-desktop tbody tr').count(),9);
+  await page.getByRole('button',{name:'Compare (3)',exact:true}).click();await page.locator('.idea-compare-desktop').waitFor();assert.equal(await page.locator('.idea-compare-desktop tbody tr').count(),11);
   await page.locator('.idea-compare-desktop [data-idea-action="evidence"]').first().click();assert.equal(await page.locator('.idea-compare-desktop .idea-evidence').count(),3);
   await page.locator('.idea-compare-desktop a').first().click();await page.getByRole('heading',{name:'Original idea',exact:true}).waitFor();
   assert.equal(await page.locator('.idea-original script').count(),0);assert.match(await page.locator('.idea-original').textContent(),/<script>/);
@@ -129,7 +130,7 @@ test('responsive themes, phone dimension comparison, 200% layout and snapshot co
     await page.evaluate(()=>scrollTo(0,0));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
     if(artifacts)await page.screenshot({path:`${artifacts}/compare-${width}-${theme}.png`,fullPage:true});
   }
-  await page.setViewportSize({width:390,height:900});assert.equal(await page.locator('.idea-compare-phone section').count(),2);
+  await page.setViewportSize({width:390,height:900});assert.equal(await page.locator('.idea-phone-overviews section').count(),2);
   await page.locator('[name="dimension"]').selectOption('6');assert.match(await page.locator('.idea-compare-phone').textContent(),/Unknown/);
   await page.locator('.idea-compare-phone a').first().click();assert.equal(await page.locator('[data-idea-action="edit"]').count(),0);
   for(const width of [390,768,1180])for(const theme of ['light','dark']){
@@ -155,6 +156,7 @@ test('refresh errors retain known content; evidence survives editing and project
   await page.locator('a[href="#/ideas/idea-2"]').click();await page.getByRole('heading',{name:'Keyword evidence',exact:true}).waitFor();
   assert.match(await page.locator('.idea-reading').textContent(),/Not measured/);
   assert.equal(await page.locator('.idea-reading .idea-scroll th[scope="row"]').first().evaluate(el=>getComputedStyle(el).textTransform),'none');
+  await page.locator('[data-idea-disclosure="sources"] > summary').click();
   assert.equal(await page.locator('a[href="https://example.com/synthetic"]').first().getAttribute('rel'),'noopener noreferrer');
   await page.getByRole('button',{name:'Edit',exact:true}).click();
   await page.locator('#idea-edit-assessments > summary').click();await page.locator('[data-idea-assessment="acquisition"] > summary').click();
@@ -197,6 +199,7 @@ test('selection stays in place; evidence and return navigation retain focus',asy
     const scope=width===390?'.idea-compare-phone':'.idea-compare-desktop';
     await page.locator(`${scope} [data-idea-action="evidence"]`).first().click();
     assert.equal(await page.evaluate(()=>document.activeElement.dataset.ideaDimension),'acquisition');
+    assert.equal(await page.evaluate(()=>document.activeElement.dataset.ideaAction),'evidence');
     assert.equal(await page.locator(`${scope} [data-idea-action="evidence"]`).count(),1);
   }
   await page.locator('.idea-compare-desktop a').nth(1).click();
@@ -272,6 +275,51 @@ test('changing a validation dependency unblocks save; unknown confidence does no
   assert.equal(requests.at(-1).patch.assessments.acquisition.judgment,'favorable');
   await page.locator('#area-nav a').nth(1).click();await page.locator('.idea-list').waitFor();
   assert.match(page.url(),/#\/ideas$/);
+  assert.deepEqual(errors,[]);
+ }finally{await browser.close();}
+});
+
+test('fit sorting, majority coverage, separate confidence, overview links and difference matrix',async()=>{
+ const {browser,page,errors,changeRecord}=await setup();try{
+  const known=(confidence='low',count=7)=>Object.fromEntries(keys.map((k,n)=>[k,{judgment:n<count?'mixed':'unknown',confidence:n<count?confidence:null,reason:n<count?'Full reason remains readable through the end of this synthetic assessment.':'',rationale:'',evidence:[],counterevidence:[],nextQuestion:'',reviewedAt:null}]));
+  changeRecord('idea-1',{assessments:known('low',7)});
+  changeRecord('idea-2',{assessments:known('high',7)});
+  changeRecord('idea-3',{assessments:known('low',2)});
+  await goIdeas(page);await page.locator('[name="sort"]').selectOption('fit');
+  assert.deepEqual(await page.locator('.idea-list tbody tr td:nth-child(2)>a').allTextContents(),['Synthetic opportunity 2','Synthetic opportunity 1','Synthetic opportunity 3']);
+  assert.match(await page.locator('.idea-list tbody tr').nth(2).textContent(),/Partial.*2 of 7 assessed/s);
+  await page.locator('a[href="#/ideas/idea-1"]').click();
+  assert.match(await page.locator('.idea-overview').textContent(),/50\/100.*7 of 7 assessed/s);
+  await page.locator('.idea-breakdown-row [data-idea-dimension="technical"]').click();
+  assert.equal(await page.locator('[data-idea-disclosure="technical"]').getAttribute('open'),'');
+  assert.equal(await page.evaluate(()=>document.activeElement.closest('details').dataset.ideaDisclosure),'technical');
+  await page.getByRole('link',{name:'Back to Ideas',exact:true}).click();
+  for(const id of ['idea-1','idea-2','idea-3'])await page.locator(`[data-idea-select="${id}"]`).check();
+  await page.getByRole('button',{name:'Compare (3)',exact:true}).click();
+  await page.locator('.idea-compare-desktop').waitFor();
+  assert.deepEqual((await page.locator('.idea-compare-desktop tbody th').allTextContents()).slice(0,3),['Fit','Confidence','Next decision']);
+  await page.locator('[name="differences"]').check();
+  assert.equal(await page.locator('.idea-compare-desktop tbody tr').count(),11); // confidence differences count
+  for(const theme of ['light','dark']){
+   await page.evaluate(t=>document.documentElement.classList.toggle('dark',t==='dark'),theme);
+   await page.setViewportSize({width:768,height:900});await noOverflow(page);
+   await page.setViewportSize({width:390,height:844});await noOverflow(page);
+   assert.equal(await page.locator('.idea-compare-phone [data-idea-action="remove"]').count(),3);
+   await page.locator('.idea-matrix [data-idea-dimension="technical"]').click();
+   assert.equal(await page.evaluate(()=>document.activeElement.name),'dimension');
+   assert.equal(await page.locator('[name="dimension"]').inputValue(),'1');
+   assert.match(await page.locator('#idea-focused-dimension').textContent(),/through the end/);
+  }
+  await page.setViewportSize({width:1180,height:900});
+  changeRecord('idea-2',{assessments:known('low',7)});changeRecord('idea-3',{assessments:known('low',7)});
+  await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+  await page.getByText('No differing assessments. 7 matching dimensions hidden.',{exact:true}).waitFor();
+  assert.equal(await page.locator('.idea-compare-desktop tbody tr').count(),4);
+  await page.locator('[name="differences"]').uncheck();assert.equal(await page.locator('.idea-compare-desktop tbody tr').count(),11);
+  await page.evaluate(()=>location.hash='/ideas/compare?ids=idea-1,idea-missing');
+  await page.getByRole('heading',{name:'Compare ideas',exact:true}).waitFor();
+  await page.locator('[name="differences"]').check();assert.equal(await page.locator('.idea-compare-desktop tbody tr').count(),11);
+  assert.match(await page.locator('.idea-compare-desktop').textContent(),/Idea unavailable/);
   assert.deepEqual(errors,[]);
  }finally{await browser.close();}
 });

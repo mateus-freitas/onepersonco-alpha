@@ -43,5 +43,12 @@ The skill performs research in the agent harness; HQ does not run an AI job.
 Detailed ASO work stays in Wow Keywords. HQ retains bounded measurements and
 provenance to support judgments, including market, language, date and brainstorm
 ID. Wow's volume proxy is not an Apple search count, and confidence is an evidence
-judgment, not a mechanical consequence of source count. No aggregate idea score
-is calculated: the owner's tradeoffs are not encoded as arbitrary weights.
+judgment, not a mechanical consequence of source count.
+
+Fit is a read-only projection shared by the CLI, HTTP payload and snapshots,
+never stored or authored by research agents. Favorable earns two points, Mixed
+one, Unfavorable zero; Unknown is excluded. All seven dimensions have equal
+weight. A rounded 0–100 score appears only once a majority are assessed, always
+with coverage. Confidence remains separate and never discounts the score. This
+is a transparent comparison aid, not a probability or an automatic winner; the
+owner's priorities still determine the decision.
