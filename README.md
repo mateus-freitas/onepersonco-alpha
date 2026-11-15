@@ -84,7 +84,7 @@ projects that have adopted the standards — the ones `opc sync` writes to.
 ```sh
 opc check         # expect 0 errors; info = pending retrofits, not problems
 opc sync          # expect "up to date" for standardized projects
-opc console       # http://localhost:4770 — reload rescans; click paths to open files; --lan for the phone on wifi
+opc hq            # http://localhost:4770 — reload rescans; click paths to open files; --lan for the phone on wifi
 ```
 
 ### 7 · Install the agent skills (machine-wide)
@@ -110,7 +110,7 @@ that has not adopted the standards yet shows as "pending retrofit" in
 
 - `opc check [--dir <checkout>]` — deterministic health: drift, markers, tasks, links; audits the checkout you run it from (worktree included); the hub's main checkout still audits every project; `--dir` overrides
 - `opc task …` — the backlog: `add` · `edit` · `list` · `show` · `search` · `move` · `done` · `cancel` · `restore` · `clean` · `trim` · `migrate` · `init`; the live store lives at `~/.onepersonco/<project>/backlog.md` with history in `backlog.archive.jsonl`, never committed (see `docs/guides/tasks.md`)
-- `opc console [--lan]` — the console; rescans on every load (board · worktrees · RFCs · docs · prompts · health); `--lan` also answers your home wifi so a phone can read and edit (same network only; opening paths stays Mac-only)
+- `opc hq [--lan]` (alias: `opc console`) — HQ; rescans on every load (board · worktrees · RFCs · docs · prompts · health); `--lan` also answers your home wifi so a phone can read and edit (same network only; opening paths stays Mac-only)
 - `opc sync [project…] [--dir <checkout>]` — push standards changes into standardized projects; targets the checkout you run it from (worktree included); the hub's main checkout still syncs all standardized projects; `--dir` overrides
 - `opc scan --snapshot` — refresh the self-contained `console/snapshot.html`
 

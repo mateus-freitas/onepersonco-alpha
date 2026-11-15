@@ -9,5 +9,8 @@
   },
   "bin": {
     "opc": "scripts/opc.mjs"
+  },
+  "scripts": {
+    "test": "node --test scripts/lib/*.test.mjs"
   }
 }

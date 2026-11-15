@@ -113,6 +113,10 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 - `docs/user/` — for product users, in the product's voice: what it does, how to
   start, anything unintuitive. No implementation detail.
 - `docs/operations/` — maintainer setup, release, and debugging procedures.
+- `docs/history/` — finished RFCs and roadmaps kept for provenance, each with a
+  `status: done` header and a pointer to the current doc. Never normative:
+  current behavior lives in `internals/`. Keep it small — handoffs, prompt
+  packs, checklists and screenshots of finished work are scratch, not history.
 - Domain folders (`branding/`, `design/`, `marketing/`, `onboarding/`, …) stay
   project-specific.
 
@@ -138,6 +142,10 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   discarded, not committed.
 - Evidence for finished work lands in the project's evidence folder or the PR
   body.
+- Agent memory (Claude auto-memory, Codex memories) holds only the owner's
+  preferences and working style. Project facts, decisions, procedures and
+  traps graduate into the repo; open work becomes a task; task state and
+  run logs never live in memory.
 
 ### Headers
 
@@ -179,10 +187,32 @@ Done at merge: after the PR merges, the orchestrator runs `opc task done <id>
 `feat/GYM-142-rest-timer`, PR body `Task: GYM-142`. The merged PR stays the code
 record; the store holds the plan and state.
 
-Prompts are sessions, not tasks: one scratch folder per unit of work
-(`prompts/<date>-<slug>/`), attached with `--prompt` at creation or later via
-`opc task edit`. When a task closes, archive its folder; leftover work becomes a
-new task — never a scratch note or a chat-only remark.
+Prompts are sessions, not tasks: one scratch folder per task
+(`prompts/<date>-<slug>/`), attached with `--prompt`. When a task closes, archive
+its folder; leftover work becomes a new task — never a scratch note or a
+chat-only remark.
+
+### Kickoff prompts
+
+Every task is filed with a kickoff prompt: the `TASK.md` at the root of its
+prompt folder, written at `opc task add` time. The owner starts a new session by
+copying it (the console's copy button, or `opc task prompt <id> | pbcopy`), so
+it stands alone. It holds:
+
+- `/opc-delegate` as the first line when the task should be orchestrated. That
+  is the whole orchestration instruction.
+- `Task: <ID> — <title>`, then what is wrong and why it matters: facts,
+  evidence, the owner's decisions and limits, open questions.
+- What to read: the docs, code entry points, PRs, related tasks and scratch
+  evidence that give the context.
+
+It never prescribes the solution — no plan, steps, file lists to change or
+acceptance recipe. The agent decides from the context; a good description of
+the problem is what makes that possible. It never names a model or effort:
+that advice is for the owner and goes on the task's `D:` line
+(`Run: Claude Opus 5.5 high`). Worker briefs written during the session go in
+subfolders (`<worker>/TASK.md`); the root `TASK.md` stays the kickoff.
+`opc check` warns about open tasks without one.
 
 The backlog sequences work; it never invents rules or scope.
 <!-- opc:end backlog -->
@@ -247,5 +277,5 @@ The backlog sequences work; it never invents rules or scope.
   `opc check`. Drift is a bug, not a style choice.
 - Skills: after editing `skills/`, run `npx skills update` so every harness
   picks the change up.
-- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc console [--lan]` (rescans on every open; `--lan` also serves the home wifi for phones) · `opc task …` (the task store; IDs are assigned by `add`). `opc new` arrives with the skeleton.
+- Commands: `opc sync` · `opc check` (deterministic health — markers, drift, backlog, links; exit 1 on errors) · `opc scan [--snapshot]` · `opc hq [--lan]` (alias: `opc console`; rescans on every open; `--lan` also serves the home wifi for phones) · `opc task …` (the task store; IDs are assigned by `add`). `opc new` arrives with the skeleton.
 - The hub itself is registered in `projects.json`, so the console covers it.

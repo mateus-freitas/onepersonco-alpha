@@ -1,0 +1,71 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
+import {spawn, execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+const {chromium} = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const hub = fileURLToPath(new URL('../', import.meta.url));
+
+test('real console: capture without URL, edit, CLI conflict and refresh, snapshots', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opc-ideas-browser-'));
+  t.after(() => fs.rmSync(root, {recursive:true,force:true}));
+  const fixture = path.join(root,'hub');
+  fs.mkdirSync(path.join(fixture,'console'),{recursive:true});
+  fs.cpSync(path.join(hub,'scripts'),path.join(fixture,'scripts'),{recursive:true});
+  for(const name of ['app.html','ideas.js','global.css']) fs.copyFileSync(path.join(hub,'console',name),path.join(fixture,'console',name));
+  fs.writeFileSync(path.join(fixture,'projects.json'),JSON.stringify({org:'Test',scratchRoot:root,projects:[]}));
+  const env = {...process.env,OPC_IDEAS_ROOT:path.join(root,'store')};
+  const opc=path.join(fixture,'scripts/opc.mjs');
+  const reserve=http.createServer();
+  await new Promise(r=>reserve.listen(0,'127.0.0.1',r));
+  const port=reserve.address().port;
+  await new Promise(r=>reserve.close(r));
+  const server=spawn(process.execPath,[opc,'hq','--port',String(port)],{env,cwd:fixture});
+  t.after(()=>{if(server.exitCode===null)server.kill();});
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Fixture startup timeout')),5000);
+    server.stdout.on('data',d=>{if(d.toString().includes('opc hq →')){clearTimeout(timer);resolve();}});
+    server.once('exit',code=>{clearTimeout(timer);reject(Error(`Fixture exited ${code}`));});
+    server.stderr.on('data',d=>{clearTimeout(timer);reject(Error(d.toString()));});
+  });
+  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
+  const page=await browser.newPage();page.setDefaultTimeout(5000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const cli=(args,input)=>JSON.parse(execFileSync(process.execPath,[opc,'idea',...args,'--json'],{env,input,encoding:'utf8'}));
+  await page.goto(`http://127.0.0.1:${port}/#/ideas`);
+  await page.getByRole('button',{name:'+ new idea',exact:true}).click();
+  await page.locator('#idea-capture').getByLabel('Title',{exact:true}).fill('Synthetic integration');
+  const original='Owner text\n\n<unsafe> literal';
+  await page.getByLabel('Original idea',{exact:true}).fill(original);
+  await page.locator('#idea-capture').getByRole('button',{name:'Create idea',exact:true}).click();
+  await page.getByRole('heading',{name:'Synthetic integration',exact:true}).waitFor();
+  const first=cli(['show','idea-1']);assert.equal(first.original,original);assert.equal(first.sources.length,0);
+  await page.getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByLabel('Summary',{exact:true}).fill('Browser edit');
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await page.getByRole('heading',{name:'Synthetic integration',exact:true}).waitFor();
+  assert.equal(cli(['show','idea-1']).summary,'Browser edit');
+  await page.getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByLabel('Summary',{exact:true}).fill('Unsaved browser draft');
+  cli(['update','idea-1','--revision','2','--file','-'],JSON.stringify({summary:'CLI research'}));
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await page.getByRole('button',{name:'Discard draft and reload',exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Summary',{exact:true}).inputValue(),'Unsaved browser draft');
+  await page.getByRole('button',{name:'Discard draft and reload',exact:true}).click();
+  await page.getByRole('button',{name:'Discard changes',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('[name="summary"]')?.value==='CLI research');
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  assert.equal(cli(['show','idea-1']).original,original);
+  for(const include of [false,true]){
+    execFileSync(process.execPath,[opc,'scan','--snapshot',...(include?['--ideas']:[])],{env,cwd:fixture});
+    await page.goto(`http://127.0.0.1:${port}/snapshot.html?included=${include}#/ideas`);
+    if(include){await page.getByRole('link',{name:'Synthetic integration',exact:true}).waitFor();assert.equal(await page.locator('[data-idea-action="capture"]').count(),0);}
+    else await page.getByText('Ideas are not included in this snapshot.',{exact:true}).waitFor();
+    assert.equal('ideas' in JSON.parse(fs.readFileSync(path.join(fixture,'console/data.json'))),false);
+  }
+  assert.deepEqual(errors,[]);
+  await browser.close();
+  await new Promise(r=>{server.once('exit',r);server.kill();});
+});

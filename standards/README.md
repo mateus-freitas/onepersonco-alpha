@@ -34,7 +34,7 @@ Marker convention (first line of every fragment):
 
 | fragment | lands with |
 | --- | --- |
-| `platforms/flutter.md` · `platforms/ts-firebase.md` | the blocos retrofit |
+| `platforms/flutter.md` · `platforms/ts-firebase.md` | a second Flutter or Firebase project — until then blocos keeps its platform rules in its module `AGENTS.md` files (`app/`, `server/`, `blocos_ui_kit/`) |
 
 `templates/` holds the small stubs agents copy: `doc-header.md`,
 `prompt-folder.md`. `templates/backlog.md` is a format reference for the task

@@ -12,6 +12,14 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
    it.
    Leftover work becomes a new task: `opc task add <project> "<title>"` with
    `--spec`, `--prompt`, `--desc` as needed, then `opc task move <id> <section>`.
+   **Every task gets a kickoff prompt when it is filed**: write
+   `prompts/<date>-<slug>/TASK.md` and attach it with `--prompt`, so the owner
+   can start the work by copying it. `/opc-delegate` first if it should be
+   orchestrated; then `Task: <ID> — <title>`, what is wrong and why, and what to
+   read (docs, code entry points, PRs, related tasks). **Never the solution, a
+   plan or steps, and never a model** — model and effort advice is for the
+   owner, on the `D:` line (`Run: …`). Rules: the backlog block, "Kickoff
+   prompts".
    Canceled work is not deleted: `opc task cancel <id>` archives it, and
    `opc task restore <id>` reopens it with the same ID. Done keeps only the 25
    most recent completions; older ones spill to the archive automatically. Read
@@ -27,6 +35,10 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
    - A step-by-step procedure for people → `docs/guides/`.
    - Product-user text → `docs/user/`; maintainer procedures → `docs/operations/`.
    - Proof of what happened → `docs/evidence/` or the PR body.
+   - A finished RFC or roadmap worth keeping → `docs/history/`, with the
+     current behavior distilled into `internals/` first.
+   - An owner preference about how agents work → agent memory; a project fact
+     or open item found in memory → the repo or a task, then drop the memory.
    - Everything else → scratch (`~/.onepersonco/<project>/`) — and it dies
      there. Nothing temporary is committed.
 3. **Graduate.** If the work produced durable knowledge, write it now:

@@ -4,13 +4,22 @@
   "worktreesRoot": "~/.onepersonco/worktrees",
   "projects": [
     {
+      "id": "aporte",
+      "name": "Aporte",
+      "key": "APT",
+      "path": "~/dev/aporte",
+      "stack": ["node", "js"],
+      "docs": "docs",
+      "standardized": true
+    },
+    {
       "id": "blocos",
       "name": "Blocos",
       "key": "BLO",
       "path": "~/dev/blocos",
       "stack": ["flutter", "dart", "ts-firebase"],
       "docs": "docs",
-      "standardized": false
+      "standardized": true
     },
     {
       "id": "gymbloc",

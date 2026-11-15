@@ -12,6 +12,8 @@
 
 
 import fs from "node:fs";
+import { createIdeasStore, runIdeaCLI, renderSnapshot, IdeaError } from './lib/ideas.mjs';
+import { allowedHost, allowedOrigin, ideaRequest, ideaErrorStatus, ideaErrorPayload } from './lib/ideas-server.mjs';
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
@@ -25,6 +27,10 @@ const platformsDir = path.join(HUB, "standards", "platforms");
 const consoleDir = path.join(HUB, "console");
 
 const expand = (p) => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : path.resolve(p));
+const ideasStore = () => createIdeasStore({
+  root: process.env.OPC_IDEAS_ROOT ?? path.join(expand(registry.scratchRoot), 'onepersonco-alpha'),
+  projects: () => JSON.parse(fs.readFileSync(path.join(HUB, 'projects.json'), 'utf8')).projects,
+});
 const SECTIONS = ["Now", "Next", "Later", "Done"];
 // The live store keeps only the most recent completions; older done tasks
 // spill to backlog.archive.jsonl, which also holds every canceled task.
@@ -713,6 +719,8 @@ async function scanAll() {
 }
 
 async function cmdScan(args) {
+  if (args.some(a => !['--snapshot', '--ideas'].includes(a))) throw new Error('unknown scan flag');
+  if (args.includes('--ideas') && !args.includes('--snapshot')) throw new Error('--ideas requires --snapshot');
   const data = await scanAll();
   fs.mkdirSync(consoleDir, { recursive: true });
   const json = JSON.stringify(data, null, 2);
@@ -724,12 +732,10 @@ async function cmdScan(args) {
   console.log(`console/data.json written — ${data.projects.length} project(s), ${lines} backlog line(s)`);
   if (args.includes("--snapshot")) {
     const css = fs.readFileSync(path.join(consoleDir, "global.css"), "utf8");
-    const app = fs
-      .readFileSync(path.join(consoleDir, "app.html"), "utf8")
-      .replace('<link rel="stylesheet" href="global.css">', `<style>\n${css}\n</style>`);
-    const safe = json.replace(/</g, "\\u003c");
-    // replacer function: `$&`/`$'` inside serialized data must stay literal
-    const injected = app.replace("<!--__DATA__-->", () => `<script>window.__DATA__ = ${safe};</` + `script>`);
+    const app = fs.readFileSync(path.join(consoleDir, "app.html"), "utf8");
+    const marker = '<script src="ideas.js"></script>';
+    const js = app.includes(marker) ? fs.readFileSync(path.join(consoleDir, 'ideas.js'), 'utf8') : '';
+    const injected = renderSnapshot(app, css, js, data, args.includes('--ideas') ? ideasStore().payload() : undefined);
     fs.writeFileSync(path.join(consoleDir, "snapshot.html"), injected);
     console.log("console/snapshot.html written — self-contained page");
   }
@@ -847,8 +853,13 @@ function checkBacklog(p, dir, add) {
         const target = item.spec.startsWith("~/") ? expand(item.spec) : path.resolve(dir, item.spec);
         if (!fs.existsSync(target)) add("error", "backlog.spec", `spec does not resolve: ${item.spec}`, rel);
       }
-      if (item.prompt && !resolvePrompt(p.id, item.prompt))
+      const promptInfo = item.prompt ? resolvePrompt(p.id, item.prompt) : null;
+      if (item.prompt && !promptInfo)
         add("error", "backlog.prompt", `prompt does not resolve: ${item.prompt}`, rel);
+      // Every open task carries a kickoff prompt: the owner starts a session by
+      // copying its TASK.md (see the backlog block, "Kickoff prompts").
+      if (s !== "Done" && !item.checked && item.id && (!item.prompt || (promptInfo && !promptInfo.task)))
+        add("warning", "backlog.kickoff", `open task without a kickoff prompt (prompt folder with TASK.md): ${item.id}`, rel);
     }
   }
 }
@@ -1916,6 +1927,16 @@ async function cmdTask(args) {
     console.log(`  ${displayFile(source.file)}${item.line ? " · line " + item.line : ""}`);
     return;
   }
+  if (sub === "prompt") {
+    // Print the task's kickoff prompt (its prompt folder's TASK.md) so the
+    // owner can pipe it into a new session: `opc task prompt BLO-24 | pbcopy`.
+    const id = pos[0];
+    const { project, item } = taskShow(id);
+    const info = item.prompt ? resolvePrompt(project.id, item.prompt) : null;
+    if (!info || !info.task) throw new Error(`${item.id} has no kickoff prompt (attach a folder with TASK.md: opc task edit ${item.id} --prompt prompts/<folder>)`);
+    process.stdout.write(info.task.content.endsWith("\n") ? info.task.content : info.task.content + "\n");
+    return;
+  }
   if (sub === "move") {
     const [id, to] = pos;
     if (!id || !to) throw new Error("usage: opc task move <id> <section> [--before <id> | --top | --end]");
@@ -2020,7 +2041,7 @@ async function cmdTask(args) {
     console.log(`initialized ${out.project} · ${out.key} → ${out.file}`);
     return;
   }
-  throw new Error("usage: opc task add|list|show|search|move|edit|done|cancel|restore|clean|trim|migrate|init");
+  throw new Error("usage: opc task add|list|show|prompt|search|move|edit|done|cancel|restore|clean|trim|migrate|init");
 }
 
 // Insert a block right after the target `## <section>` heading, above any
@@ -2098,7 +2119,7 @@ async function freshScan() {
   return data;
 }
 
-function readBody(req, limit = 1024 * 1024) {
+function readBody(req, limit = 1024 * 1024, strictUTF8 = false) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
@@ -2107,7 +2128,10 @@ function readBody(req, limit = 1024 * 1024) {
       if (size > limit) { reject(new Error("request body too large")); req.destroy(); return; }
       chunks.push(chunk);
     });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("end", () => {
+      try { resolve(strictUTF8 ? new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)) : Buffer.concat(chunks).toString("utf8")); }
+      catch (err) { reject(err); }
+    });
     req.on("error", reject);
   });
 }
@@ -2133,11 +2157,10 @@ const isPrivate = (req) => {
 async function cmdConsole(args) {
   const portIdx = args.indexOf("--port");
   const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 4770;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('invalid console port');
   const lan = args.includes("--lan"); // opt-in: also answer the private network
 
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, `http://localhost:${port}`);
-    const name = url.pathname === "/" ? "app.html" : url.pathname.replace(/^\/+/, "");
     const sendJson = (status, payload) => {
       res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
       res.end(JSON.stringify(payload));
@@ -2147,15 +2170,30 @@ async function cmdConsole(args) {
       return res.end(lan ? "localhost or your private network only" : "localhost only — run with --lan for your home network");
     }
 
+    const listeningPort = server.address().port;
+    if (!allowedHost(req.headers.host, listeningPort, lan)) return sendJson(403, { ok: false, error: 'Host refused' });
+    if (!allowedOrigin(req.headers.origin, req.headers.host, listeningPort, lan)) return sendJson(403, { ok: false, error: 'cross-origin request refused' });
+    let url;
+    try { url = new URL(req.url, `http://localhost:${listeningPort}`); }
+    catch { return sendJson(400, { ok: false, error: 'invalid request URL' }); }
+    const name = url.pathname === "/" ? "app.html" : url.pathname.replace(/^\/+/, "");
+    if (req.method === 'GET' && url.pathname === '/ideas.json') {
+      try { return sendJson(200, ideasStore().payload()); }
+      catch (e) { return sendJson(ideaErrorStatus(e), ideaErrorPayload(e)); }
+    }
+    if (req.method === 'POST' && ['/idea/add', '/idea/update'].includes(url.pathname)) {
+      try {
+        if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) throw new IdeaError('invalid', 'application/json required');
+        let body;
+        try { body = JSON.parse(await readBody(req, 1024 * 1024, true)); } catch { throw new IdeaError('invalid', 'invalid JSON body'); }
+        return sendJson(200, await ideaRequest(ideasStore(), url.pathname, body));
+      } catch (e) { return sendJson(ideaErrorStatus(e), ideaErrorPayload(e)); }
+    }
+
     // ---- task writes: add, move/reposition, cancel (stable IDs, not lines)
     if (req.method === "POST" && (url.pathname === "/task/add" || url.pathname === "/task/move" ||
         url.pathname === "/task/cancel" || url.pathname === "/task/trim" ||
         url.pathname === "/task/clean")) {
-      const origin = req.headers.origin;
-      const originHost = origin && origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
-      const sameHost = originHost && originHost === String(req.headers.host || "");
-      if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin) && !(lan && sameHost))
-        return sendJson(403, { ok: false, error: "cross-origin write refused" });
       let body = null;
       try { body = JSON.parse(await readBody(req)); } catch { /* answered below */ }
       const kind = url.pathname.slice("/task/".length);
@@ -2288,7 +2326,7 @@ async function cmdConsole(args) {
     }
     const file = path.join(consoleDir, name);
     if (!name.includes("..") && fs.existsSync(file) && fs.statSync(file).isFile()) {
-      const type = name.endsWith(".css") ? "text/css" : name.endsWith(".html") ? "text/html" : "text/plain";
+      const type = name.endsWith(".css") ? "text/css" : name.endsWith(".html") ? "text/html" : name.endsWith(".js") ? "text/javascript" : "text/plain";
       res.writeHead(200, { "content-type": `${type}; charset=utf-8` });
       return res.end(fs.readFileSync(file));
     }
@@ -2298,9 +2336,9 @@ async function cmdConsole(args) {
 
   server.on("error", (err) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`opc console: port ${port} is already in use — another console is probably running (kill it, or use --port <N>)`);
+      console.error(`opc hq: port ${port} is already in use — another console is probably running (kill it, or use --port <N>)`);
     } else {
-      console.error(`opc console: ${err.message}`);
+      console.error(`opc hq: ${err.message}`);
     }
     process.exit(1);
   });
@@ -2310,13 +2348,13 @@ async function cmdConsole(args) {
   const healthLine = h.errors + h.warnings + h.infos ? `health: ${healthCounts(h)}` : "health: clean";
   const pending = data.projects.filter((p) => p.exists && !p.backlog).map((p) => p.id);
   server.listen(port, lan ? "0.0.0.0" : "127.0.0.1", () => {
-    console.log(`opc console → http://localhost:${port}`);
+    console.log(`opc hq → http://localhost:${port}`);
     if (lan) {
       const nets = Object.entries(os.networkInterfaces())
         .flatMap(([name, addrs]) => (addrs || []).map((a) => ({ name, ...a })));
       const ip = (nets.find((a) => a.family === "IPv4" && !a.internal && a.name.startsWith("en")) ||
         nets.find((a) => a.family === "IPv4" && !a.internal))?.address;
-      console.log(`lan → http://${ip || "<this mac's wifi ip>"}:${port} — same wifi only; anyone on it can read and edit backlogs`);
+      console.log(`lan → http://${ip || "<this mac's wifi ip>"}:${port} — same wifi only; anyone on it can read and edit backlogs and ideas`);
     }
     console.log(healthLine);
     console.log(`pending retrofit: ${pending.length ? pending.join(", ") : "none"} — data rescans on every load`);
@@ -2327,14 +2365,22 @@ async function cmdConsole(args) {
 
 async function main() {
   const [cmd, ...args] = process.argv.slice(2);
+  if (cmd === 'idea') {
+    try { return await runIdeaCLI(args, ideasStore()); }
+    catch (e) {
+      const error = ideaErrorPayload(e);
+      if (args.includes('--json')) console.log(JSON.stringify(error)); else console.error(e.message);
+      process.exitCode = 1; return;
+    }
+  }
   if (cmd === "sync") return cmdSync(args);
   if (cmd === "check") return cmdCheck(args);
   if (cmd === "scan") return cmdScan(args);
-  if (cmd === "console") return cmdConsole(args);
+  if (cmd === "hq" || cmd === "console") return cmdConsole(args);
   if (cmd === "task") {
     try { return await cmdTask(args); } catch (err) { console.error(err.message); process.exit(1); }
   }
-  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot]   write console/data.json (and a self-contained snapshot.html)\n  opc console [--port N] [--lan]  serve the console; --lan also answers your home wifi\n  opc task add|list|show|search|move|edit|done|cancel|restore|clean|trim|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot [--ideas]]   write console/data.json (and a self-contained snapshot.html)\n  opc hq [--port N] [--lan]  open HQ; --lan also answers your home wifi (alias: opc console)\n  opc idea --help   private idea store and research rubric\n  opc task add|list|show|prompt|search|move|edit|done|cancel|restore|clean|trim|migrate|init   task store; IDs are assigned by add; prompt prints the kickoff\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 

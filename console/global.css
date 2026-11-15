@@ -108,3 +108,23 @@ code, pre, kbd, .mono, .sub {
   --project-4: oklch(0.72 0.11 180);
   --project-5: oklch(0.68 0.17 25);
 }
+
+/* Ideas judgments and evidence confidence have separate semantic roles. */
+:root {
+  --judgment-favorable: #137738;
+  --judgment-mixed: #806a00;
+  --judgment-unfavorable: #b81a4d;
+  --judgment-unknown: #686868;
+  --confidence-low: #546375;
+  --confidence-medium: #2f5890;
+  --confidence-high: #2149a3;
+}
+.dark {
+  --judgment-favorable: #5fd37f;
+  --judgment-mixed: #e9c944;
+  --judgment-unfavorable: #f2718e;
+  --judgment-unknown: #a1a1a1;
+  --confidence-low: #91a4b9;
+  --confidence-medium: #83b3ef;
+  --confidence-high: #a6c9ff;
+}

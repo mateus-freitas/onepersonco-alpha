@@ -40,6 +40,8 @@ names: use the capabilities actually available and record what was used.
   task genuinely needs it.
 - Codex models: `low`–`high` for routine work; `xhigh` only when the task
   genuinely demands it; never `max` or `ultra` without asking the owner first.
+- Codex default for validation, device rounds and reviews: `gpt-6.1-sol` at
+  `high`. Pick `gpt-6-astra` only for a concrete reason, and record it.
 - OpenCode models: default variant; pass `--variant high` only when a retry needs it.
 - Record the model, effort, and a one-line rationale for every spawned agent in
   the task's record (its evidence folder or the PR body). If per-agent selection
