@@ -187,10 +187,32 @@ Done at merge: after the PR merges, the orchestrator runs `opc task done <id>
 `feat/GYM-142-rest-timer`, PR body `Task: GYM-142`. The merged PR stays the code
 record; the store holds the plan and state.
 
-Prompts are sessions, not tasks: one scratch folder per unit of work
-(`prompts/<date>-<slug>/`), attached with `--prompt` at creation or later via
-`opc task edit`. When a task closes, archive its folder; leftover work becomes a
-new task — never a scratch note or a chat-only remark.
+Prompts are sessions, not tasks: one scratch folder per task
+(`prompts/<date>-<slug>/`), attached with `--prompt`. When a task closes, archive
+its folder; leftover work becomes a new task — never a scratch note or a
+chat-only remark.
+
+### Kickoff prompts
+
+Every task is filed with a kickoff prompt: the `TASK.md` at the root of its
+prompt folder, written at `opc task add` time. The owner starts a new session by
+copying it (the console's copy button, or `opc task prompt <id> | pbcopy`), so
+it stands alone. It holds:
+
+- `/opc-delegate` as the first line when the task should be orchestrated. That
+  is the whole orchestration instruction.
+- `Task: <ID> — <title>`, then what is wrong and why it matters: facts,
+  evidence, the owner's decisions and limits, open questions.
+- What to read: the docs, code entry points, PRs, related tasks and scratch
+  evidence that give the context.
+
+It never prescribes the solution — no plan, steps, file lists to change or
+acceptance recipe. The agent decides from the context; a good description of
+the problem is what makes that possible. It never names a model or effort:
+that advice is for the owner and goes on the task's `D:` line
+(`Run: Claude Opus 5.5 high`). Worker briefs written during the session go in
+subfolders (`<worker>/TASK.md`); the root `TASK.md` stays the kickoff.
+`opc check` warns about open tasks without one.
 
 The backlog sequences work; it never invents rules or scope.
 <!-- opc:end backlog -->
