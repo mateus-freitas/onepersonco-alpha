@@ -19,17 +19,21 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 - One objective per branch and PR; start from refreshed `origin/main`. Continue
   the existing branch when updating its PR.
-- Branch names carry intent first: `<type>/<slug>`, the slug starting with the
-  task ID when there is one — `feat/GYM-142-rest-timer`, `chore/opc-retrofit` —
-  with the conventional types (`feat/`, `fix/`, `docs/`, `chore/`, `refactor/`,
-  `test/`, `perf/`). When several agents run concurrently and authorship adds
-  signal, prefix the agent that actually authored the branch — `claude/…`,
-  `opencode/…`, `codex/…`, `deepseek/…`, e.g.
-  `opencode/feat/GYM-142-retrofit`. The prefix is optional and must be truthful;
-  the old default of every branch carrying `codex/` regardless of the author is
-  retired. Workspace tools that auto-name branches (e.g. `t3/…`) are fine while
-  a run is exploratory; rename to the convention once it becomes a real
-  objective.
+- **Every branch and PR names its task ID.** Work that will become a PR has a
+  task; if none exists, file one first (`opc task add`). The only exception is
+  generated standards sync (below).
+- Branch: `<type>/<ID>-<slug>` — `fix/BLO-42-guest-exit-cap`,
+  `feat/GYM-142-rest-timer` — with the conventional types (`feat/`, `fix/`,
+  `docs/`, `chore/`, `refactor/`, `test/`, `perf/`); the ID keeps its
+  uppercase key, the slug is short lowercase kebab-case. When several agents
+  run concurrently and authorship adds signal, prefix the agent that actually
+  authored the branch — `claude/…`, `opencode/…`, `codex/…`, `deepseek/…`,
+  e.g. `opencode/feat/GYM-142-retrofit`. The prefix is optional and must be
+  truthful. Workspace tools that auto-name branches (e.g. `t3/…`) are fine
+  while a run is exploratory; rename to the convention (`git branch -m`)
+  before the first push.
+- One task can own several PRs (split or stacked work): each branch and title
+  still carries the same ID.
 - Never push to `main`, force-push, or rewrite shared history as routine cleanup.
 - Preserve unrelated changes in a dirty worktree; stage explicit paths or hunks
   and check the staged diff before committing.
@@ -39,6 +43,7 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 ### Commits
 
 - Conventional titles in plain language: `fix(editor): sets no longer jump after ...`.
+  Commits need not repeat the task ID; the branch and PR carry it.
 
 ### Standards sync (generated)
 
@@ -55,6 +60,10 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 
 ### Pull requests
 
+- Title: the conventional commit form ending with the task ID in parentheses —
+  `fix(auth): guest exit keeps its daily cap (BLO-42)`. The ID goes last so
+  the type and summary still read first in lists and changelogs. Retitle a PR
+  you continue if it lacks the ID.
 - One request is one PR; split only when the objective genuinely spans unrelated
   behavior or the owner asks.
 - Body: the problem in a sentence or two, then how it was fixed; relevant

@@ -20,6 +20,9 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
    plan or steps, and never a model** — model and effort advice is for the
    owner, on the `D:` line (`Run: …`). Rules: the backlog block, "Kickoff
    prompts".
+   Work that becomes a PR always has a task: its branch is
+   `<type>/<ID>-<slug>` and its PR title ends with `(<ID>)` — the git-pr
+   block. File the task before branching, not after.
    Canceled work is not deleted: `opc task cancel <id>` archives it, and
    `opc task restore <id>` reopens it with the same ID. Done keeps only the 25
    most recent completions; older ones spill to the archive automatically. Read

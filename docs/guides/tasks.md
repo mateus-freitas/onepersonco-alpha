@@ -17,8 +17,12 @@ opc task prompt GYM-142 | pbcopy   # copy the kickoff prompt into a new session
 opc task search gymbloc "keyboard" # titles/descriptions, live and archive
 ```
 
-IDs are `KEY-N` (`GYM-142`): assigned on add, stable, never reused. Cite the ID
-in the branch (`feat/GYM-142-rest-timer`) and the PR body (`Task: GYM-142`).
+IDs are `KEY-N` (`GYM-142`): assigned on add, stable, never reused. Every
+branch and PR names its task: the branch is `<type>/<ID>-<slug>`
+(`feat/GYM-142-rest-timer`), the PR title ends with the ID
+(`feat(timer): rest timer survives backgrounding (GYM-142)`), and the body
+cites it on its own line (`Task: GYM-142`). No task yet? File one before
+branching. Rules: the git-pr block.
 
 ## Create and move
 

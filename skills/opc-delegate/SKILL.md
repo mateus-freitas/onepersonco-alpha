@@ -38,7 +38,9 @@ You are the orchestrator. You own architecture, interfaces, integration, and
    project's `AGENTS.md` for external review triggers (labels, bots, order)
    and follow them at open time: open as draft when the flow requires it,
    apply trigger labels while still draft, then mark ready. Record
-   selected/skipped in the PR body.
+   selected/skipped in the PR body. Branch `<type>/<ID>-<slug>`, title ending
+   with `(<ID>)` (the git-pr block); worker worktree branches follow the same
+   form.
 8. **Close the run.** `opc task list <project> --json` at the end: every
    objective done — `opc task done <id> --pr <url>` once its PR merges — every
    discovery filed as its own task (`opc task add`), nothing half-worded.
