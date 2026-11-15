@@ -853,8 +853,13 @@ function checkBacklog(p, dir, add) {
         const target = item.spec.startsWith("~/") ? expand(item.spec) : path.resolve(dir, item.spec);
         if (!fs.existsSync(target)) add("error", "backlog.spec", `spec does not resolve: ${item.spec}`, rel);
       }
-      if (item.prompt && !resolvePrompt(p.id, item.prompt))
+      const promptInfo = item.prompt ? resolvePrompt(p.id, item.prompt) : null;
+      if (item.prompt && !promptInfo)
         add("error", "backlog.prompt", `prompt does not resolve: ${item.prompt}`, rel);
+      // Every open task carries a kickoff prompt: the owner starts a session by
+      // copying its TASK.md (see the backlog block, "Kickoff prompts").
+      if (s !== "Done" && !item.checked && item.id && (!item.prompt || (promptInfo && !promptInfo.task)))
+        add("warning", "backlog.kickoff", `open task without a kickoff prompt (prompt folder with TASK.md): ${item.id}`, rel);
     }
   }
 }
@@ -1922,6 +1927,16 @@ async function cmdTask(args) {
     console.log(`  ${displayFile(source.file)}${item.line ? " · line " + item.line : ""}`);
     return;
   }
+  if (sub === "prompt") {
+    // Print the task's kickoff prompt (its prompt folder's TASK.md) so the
+    // owner can pipe it into a new session: `opc task prompt BLO-24 | pbcopy`.
+    const id = pos[0];
+    const { project, item } = taskShow(id);
+    const info = item.prompt ? resolvePrompt(project.id, item.prompt) : null;
+    if (!info || !info.task) throw new Error(`${item.id} has no kickoff prompt (attach a folder with TASK.md: opc task edit ${item.id} --prompt prompts/<folder>)`);
+    process.stdout.write(info.task.content.endsWith("\n") ? info.task.content : info.task.content + "\n");
+    return;
+  }
   if (sub === "move") {
     const [id, to] = pos;
     if (!id || !to) throw new Error("usage: opc task move <id> <section> [--before <id> | --top | --end]");
@@ -2026,7 +2041,7 @@ async function cmdTask(args) {
     console.log(`initialized ${out.project} · ${out.key} → ${out.file}`);
     return;
   }
-  throw new Error("usage: opc task add|list|show|search|move|edit|done|cancel|restore|clean|trim|migrate|init");
+  throw new Error("usage: opc task add|list|show|prompt|search|move|edit|done|cancel|restore|clean|trim|migrate|init");
 }
 
 // Insert a block right after the target `## <section>` heading, above any
@@ -2365,7 +2380,7 @@ async function main() {
   if (cmd === "task") {
     try { return await cmdTask(args); } catch (err) { console.error(err.message); process.exit(1); }
   }
-  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot [--ideas]]   write console/data.json (and a self-contained snapshot.html)\n  opc hq [--port N] [--lan]  open HQ; --lan also answers your home wifi (alias: opc console)\n  opc idea --help   private idea store and research rubric\n  opc task add|list|show|search|move|edit|done|cancel|restore|clean|trim|migrate|init   task store; IDs are assigned by add\n  sync/check follow the checkout you run them from; --dir overrides");
+  console.log("usage:\n  opc sync [project…] [--dir <checkout>]   compose standards into standardized projects (all, or named ones)\n  opc check [--json] [--dir <checkout>]    deterministic health checks (exit 1 on errors)\n  opc scan [--snapshot [--ideas]]   write console/data.json (and a self-contained snapshot.html)\n  opc hq [--port N] [--lan]  open HQ; --lan also answers your home wifi (alias: opc console)\n  opc idea --help   private idea store and research rubric\n  opc task add|list|show|prompt|search|move|edit|done|cancel|restore|clean|trim|migrate|init   task store; IDs are assigned by add; prompt prints the kickoff\n  sync/check follow the checkout you run them from; --dir overrides");
   process.exit(2);
 }
 

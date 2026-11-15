@@ -16,6 +16,9 @@ this is not a feature index.
   delete, not a source of truth. Durable knowledge graduates into a repo.
 - **Task** — one line in the store: title, optional `spec:`/`prompt:`/priority,
   a `D:` description, and a section (`Now` · `Next` · `Later` · `Done`).
+- **Kickoff prompt** — the `TASK.md` of a task's prompt folder: the problem and
+  what to read, copied by the owner to start a session (`opc task prompt <id>`).
+  Never the solution or a model.
 - **Task ID** — `KEY-N` (`GYM-142`), assigned by `opc task add`, stable and never
   reused; branches and PR bodies cite it.
 - **Task store** — `~/.onepersonco/<project>/backlog.md` plus

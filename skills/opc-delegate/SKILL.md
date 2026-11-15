@@ -16,15 +16,14 @@ You are the orchestrator. You own architecture, interfaces, integration, and
    from the hub). Default for well-specified work: the cheap OpenCode Go tier
    (`opencode-go/deepseek-v4.1-flash`); step up only on evidence (failed
    attempts, genuine complexity). Record model and effort in the task record.
-3. **Write a complete brief** as `TASK.md` in the task's scratch folder
-   (`~/.onepersonco/<project>/prompts/<YYYY-MM-DD>-<slug>/`; template:
-   the hub's `standards/templates/prompt-folder.md`). A brief carries: the task
-   ID (`Task: GYM-142`), workdir and owned files, the exact deliverable, how to
-   verify, the forbidden actions ("do not commit, push, or merge — leave the
-   tree dirty"), and where to write `NOTES.md`. Attach the folder at creation
-   (`opc task add … --prompt prompts/<folder>`) or once work starts
-   (`opc task edit <id> --prompt prompts/<folder>`) so the console links brief
-   and worktree. An incomplete brief is not a delegation — it is a gamble.
+3. **Write a complete worker brief** as `<worker>/TASK.md` inside the task's
+   scratch folder (`~/.onepersonco/<project>/prompts/<YYYY-MM-DD>-<slug>/`;
+   template: the hub's `standards/templates/prompt-folder.md`). The folder's
+   root `TASK.md` is the owner's kickoff prompt — leave it as it is. A worker
+   brief carries: the task ID (`Task: GYM-142`), workdir and owned files, the
+   exact deliverable, how to verify, the forbidden actions ("do not commit,
+   push, or merge — leave the tree dirty"), and where to write `NOTES.md`. An
+   incomplete brief is not a delegation — it is a gamble.
 4. **Launch.** T3 Code: `delegate_task` (one task per brief, async, stable
    `clientRequestId`, model in `target`); Claude: the subagent tool; Codex:
    `codex exec -C <worktree> -m <model> …`. Parallel workers get their own
@@ -44,7 +43,9 @@ You are the orchestrator. You own architecture, interfaces, integration, and
    objective done — `opc task done <id> --pr <url>` once its PR merges — every
    discovery filed as its own task (`opc task add`), nothing half-worded.
    Workers never touch the store, so there is no backlog diff to review and no
-   bookkeeping commit to land.
+   bookkeeping commit to land. Each filed task gets its kickoff prompt
+   (`opc-task-loop`, step 1): problem and reading list, never the solution or
+   a model.
 9. **Report honestly:** verified state, what was skipped, open questions, what
    the owner must decide.
 
