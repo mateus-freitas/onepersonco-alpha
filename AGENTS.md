@@ -113,6 +113,10 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
 - `docs/user/` — for product users, in the product's voice: what it does, how to
   start, anything unintuitive. No implementation detail.
 - `docs/operations/` — maintainer setup, release, and debugging procedures.
+- `docs/history/` — finished RFCs and roadmaps kept for provenance, each with a
+  `status: done` header and a pointer to the current doc. Never normative:
+  current behavior lives in `internals/`. Keep it small — handoffs, prompt
+  packs, checklists and screenshots of finished work are scratch, not history.
 - Domain folders (`branding/`, `design/`, `marketing/`, `onboarding/`, …) stay
   project-specific.
 
@@ -138,6 +142,10 @@ A setup-only request never authorizes a push or PR by itself, whatever the polic
   discarded, not committed.
 - Evidence for finished work lands in the project's evidence folder or the PR
   body.
+- Agent memory (Claude auto-memory, Codex memories) holds only the owner's
+  preferences and working style. Project facts, decisions, procedures and
+  traps graduate into the repo; open work becomes a task; task state and
+  run logs never live in memory.
 
 ### Headers
 
