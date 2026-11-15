@@ -19,7 +19,7 @@
       "path": "~/dev/blocos",
       "stack": ["flutter", "dart", "ts-firebase"],
       "docs": "docs",
-      "standardized": false
+      "standardized": true
     },
     {
       "id": "gymbloc",

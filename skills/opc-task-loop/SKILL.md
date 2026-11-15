@@ -27,6 +27,10 @@ Work is not done until the bookkeeping is. The whole loop takes a minute.
    - A step-by-step procedure for people → `docs/guides/`.
    - Product-user text → `docs/user/`; maintainer procedures → `docs/operations/`.
    - Proof of what happened → `docs/evidence/` or the PR body.
+   - A finished RFC or roadmap worth keeping → `docs/history/`, with the
+     current behavior distilled into `internals/` first.
+   - An owner preference about how agents work → agent memory; a project fact
+     or open item found in memory → the repo or a task, then drop the memory.
    - Everything else → scratch (`~/.onepersonco/<project>/`) — and it dies
      there. Nothing temporary is committed.
 3. **Graduate.** If the work produced durable knowledge, write it now:
